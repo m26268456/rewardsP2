@@ -1,0 +1,70 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: rewards-db
+    environment:
+      POSTGRES_USER: rewards_user
+      POSTGRES_PASSWORD: rewards_password
+      POSTGRES_DB: rewards_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rewards_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: rewards-backend
+    environment:
+      NODE_ENV: development
+      DOCKER_ENV: "true"
+      DATABASE_URL: postgresql://rewards_user:rewards_password@postgres:5432/rewards_db
+      PORT: 3001
+      # 優化配置
+      DB_POOL_MAX: "20"
+      DB_POOL_MIN: "2"
+      DB_STATEMENT_TIMEOUT: "30000"
+      DB_QUERY_TIMEOUT: "30000"
+      ALLOWED_ORIGINS: "http://localhost:3000,http://frontend:3000"
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: npm run dev
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3001/api/quota"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: rewards-frontend
+    environment:
+      VITE_API_URL: http://backend:3001
+      DOCKER_ENV: "true"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+
