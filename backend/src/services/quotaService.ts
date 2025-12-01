@@ -170,6 +170,7 @@ export class QuotaService {
 
         // 更新資料庫
         if (quota.scheme_id) {
+          // 明確指定 UUID 類型以避免 PostgreSQL 類型推斷問題
           await client.query(
             `UPDATE quota_trackings
              SET used_quota = 0,
@@ -178,15 +179,15 @@ export class QuotaService {
                  next_refresh_at = $2,
                  last_refresh_at = CURRENT_TIMESTAMP,
                  updated_at = CURRENT_TIMESTAMP
-             WHERE scheme_id = $3 
-               AND (payment_method_id = $4 OR (payment_method_id IS NULL AND $4 IS NULL))
-               AND reward_id = $5
+             WHERE scheme_id = $3::uuid
+               AND (payment_method_id = $4::uuid OR (payment_method_id IS NULL AND $4::uuid IS NULL))
+               AND reward_id = $5::uuid
                AND payment_reward_id IS NULL`,
             [
               quotaLimit,
               nextRefresh,
               quota.scheme_id,
-              quota.payment_method_id,
+              quota.payment_method_id || null,
               quota.reward_id,
             ]
           );

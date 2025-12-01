@@ -102,9 +102,9 @@ router.put(
       if (actualSchemeId) {
         checkResult = await pool.query(
           `SELECT id, used_quota FROM quota_trackings
-           WHERE scheme_id = $1 
-             AND (payment_method_id = $2 OR (payment_method_id IS NULL AND $2 IS NULL))
-             AND reward_id = $3
+           WHERE scheme_id = $1::uuid
+             AND (payment_method_id = $2::uuid OR (payment_method_id IS NULL AND $2::uuid IS NULL))
+             AND reward_id = $3::uuid
              AND payment_reward_id IS NULL`,
           [actualSchemeId, paymentMethodId || null, rewardId]
         );

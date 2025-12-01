@@ -131,8 +131,8 @@ router.post(
           const quotaResult = await client.query(
             `SELECT id, used_quota, remaining_quota, current_amount
              FROM quota_trackings
-             WHERE scheme_id = $1 AND reward_id = $2 
-             AND (payment_method_id = $3 OR (payment_method_id IS NULL AND $3 IS NULL))`,
+             WHERE scheme_id = $1::uuid AND reward_id = $2::uuid 
+             AND (payment_method_id = $3::uuid OR (payment_method_id IS NULL AND $3::uuid IS NULL))`,
             [validSchemeId, reward.id, validPaymentMethodId]
           );
 
@@ -164,7 +164,7 @@ router.post(
             await client.query(
               `INSERT INTO quota_trackings 
                (scheme_id, payment_method_id, reward_id, used_quota, remaining_quota, current_amount)
-               VALUES ($1, $2, $3, $4, $5, $6)`,
+               VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6)`,
               [
                 validSchemeId,
                 validPaymentMethodId,
@@ -251,8 +251,8 @@ router.delete(
                  END,
                  current_amount = current_amount - $2,
                  updated_at = CURRENT_TIMESTAMP
-             WHERE scheme_id = $3 AND reward_id = $4
-             AND (payment_method_id = $5 OR (payment_method_id IS NULL AND $5 IS NULL))`,
+             WHERE scheme_id = $3::uuid AND reward_id = $4::uuid
+             AND (payment_method_id = $5::uuid OR (payment_method_id IS NULL AND $5::uuid IS NULL))`,
             [
               calculatedReward,
               parseFloat(transaction.amount),

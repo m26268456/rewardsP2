@@ -102,9 +102,9 @@ router.post(
             const quotaResult = await pool.query(
               `SELECT remaining_quota, used_quota
                FROM quota_trackings
-               WHERE scheme_id = $1 
-                 AND reward_id = $2
-                 AND (payment_method_id = $3 OR (payment_method_id IS NULL AND $3 IS NULL))`,
+               WHERE scheme_id = $1::uuid 
+                 AND reward_id = $2::uuid
+                 AND (payment_method_id = $3::uuid OR (payment_method_id IS NULL AND $3::uuid IS NULL))`,
               [schemeId, reward.id, paymentMethodId || null]
             );
 

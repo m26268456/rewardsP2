@@ -409,8 +409,8 @@ router.delete('/transactions/clear', async (req: Request, res: Response) => {
                    END,
                    current_amount = current_amount - $2,
                    updated_at = CURRENT_TIMESTAMP
-               WHERE scheme_id = $3 AND reward_id = $4
-               AND (payment_method_id = $5 OR (payment_method_id IS NULL AND $5 IS NULL))`,
+               WHERE scheme_id = $3::uuid AND reward_id = $4::uuid
+               AND (payment_method_id = $5::uuid OR (payment_method_id IS NULL AND $5::uuid IS NULL))`,
               [
                 calculatedReward,
                 parseFloat(transaction.amount),

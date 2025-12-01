@@ -155,9 +155,9 @@ async function checkAndRefreshQuotas() {
                    next_refresh_at = $2,
                    last_refresh_at = CURRENT_TIMESTAMP,
                    updated_at = CURRENT_TIMESTAMP
-               WHERE scheme_id = $3 
-                 AND payment_method_id = $4
-                 AND reward_id = $5
+               WHERE scheme_id = $3::uuid 
+                 AND payment_method_id = $4::uuid
+                 AND reward_id = $5::uuid
                  AND payment_reward_id IS NULL`,
               [quotaLimit, nextRefresh, quota.scheme_id, quota.payment_method_id, quota.reward_id]
             );
