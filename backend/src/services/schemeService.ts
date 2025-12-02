@@ -214,25 +214,25 @@ function matchesChannelName(keyword: string, channelName: string): { matched: bo
     }
   }
   
-  // 如果關鍵字長度足夠（至少3個字符），允許部分匹配作為最後手段
-  // 但需要確保不是部分匹配導致的混亂
-  if (normalizedKeyword.length >= 3) {
-    // 檢查關鍵字是否在名稱開頭（作為單詞開頭）
-    const keywordAtStart = new RegExp(`^${escapedKeyword}\\b`, 'i');
-    // 檢查關鍵字是否在名稱結尾（作為單詞結尾）
-    const keywordAtEnd = new RegExp(`\\b${escapedKeyword}$`, 'i');
-    
-    // 如果關鍵字在原名稱中作為單詞開頭或結尾，允許匹配
-    if (keywordAtStart.test(baseNameLower) || keywordAtEnd.test(baseNameLower)) {
+  // 允許部分匹配（關鍵字包含在名稱中，或名稱包含在關鍵字中）
+  // 這樣可以支持部分關鍵字查詢，例如 "蝦皮" 可以匹配 "蝦皮購物Shopee"
+  if (normalizedKeyword.length >= 2) {
+    // 檢查關鍵字是否在名稱中（部分匹配）
+    if (baseNameLower.includes(normalizedKeyword) || normalizedKeyword.includes(baseNameLower)) {
       return { matched: true, isExact: false, isAlias: false };
     }
     
-    // 檢查別稱中的部分匹配（作為單詞開頭或結尾）
+    // 檢查別稱中的部分匹配
     for (const alias of aliases) {
       const aliasLower = alias.toLowerCase();
-      if (keywordAtStart.test(aliasLower) || keywordAtEnd.test(aliasLower)) {
+      if (aliasLower.includes(normalizedKeyword) || normalizedKeyword.includes(aliasLower)) {
         return { matched: true, isExact: false, isAlias: true };
       }
+    }
+    
+    // 檢查完整名稱（包含別稱）
+    if (fullNameLower.includes(normalizedKeyword) || normalizedKeyword.includes(fullNameLower)) {
+      return { matched: true, isExact: false, isAlias: false };
     }
   }
   
@@ -300,38 +300,38 @@ export async function queryChannelRewardsByKeywords(
         };
       }
 
-      // 為每個匹配的通路分別查詢回饋
-      // 優先返回精確匹配的通路，如果有多個精確匹配，只返回第一個
-      // 這樣可以避免部分匹配導致的混亂（例如 "net" 不會同時匹配 "NET" 和 "Netflix"）
-      
-      // 找出最佳匹配（分數最小的，即最精確的）
-      const bestMatches = matches.filter(m => m.matchScore === matches[0].matchScore);
-      
-      // 只使用最佳匹配的通路（如果有多個精確匹配，只取第一個）
-      const bestMatch = bestMatches[0];
-      
-      if (bestMatch) {
-        const channelRewards = await queryChannelRewards([bestMatch.id]);
+      // 返回所有匹配的通路（支持部分匹配時返回多個結果）
+      // 例如："NET" 可以匹配 "NET" 和 "NETFLIX"，分別返回兩個結果
+      const channelRewardsList = [];
+      for (const match of matches) {
+        const channelRewards = await queryChannelRewards([match.id]);
         if (channelRewards.length > 0) {
-          const { baseName } = parseChannelName(bestMatch.name);
-          return {
-            channelId: bestMatch.id,
-            channelName: baseName, // 只顯示原名稱，不顯示別稱
-            results: channelRewards[0].results, // 結果已經在 queryChannelRewards 中排序（排除的在前）
-          };
+          const { baseName } = parseChannelName(match.name);
+          channelRewardsList.push({
+            channelId: match.id,
+            channelName: baseName,
+            results: channelRewards[0].results,
+          });
         }
+      }
+      
+      // 如果找到匹配的通路，返回所有結果
+      if (channelRewardsList.length > 0) {
+        return channelRewardsList;
       }
 
       // 沒有找到結果
-      return {
+      return [{
         channelId: '',
         channelName: keyword,
         results: [],
-      };
+      }];
     })
   );
 
-  return results.filter((r) => r !== null);
+  // 將結果展平（因為每個關鍵字可能返回多個匹配）
+  const flattened = results.flat().filter((r) => r !== null);
+  return flattened;
 }
 
 /**

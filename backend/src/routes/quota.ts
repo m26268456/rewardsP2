@@ -12,7 +12,11 @@ router.get('/', async (req: Request, res: Response) => {
       `SELECT 
          cs.id as scheme_id,
          NULL::uuid as payment_method_id,
+         c.id as card_id,
+         NULL::uuid as payment_method_id_for_group,
          c.name || '-' || cs.name as name,
+         c.name as card_name,
+         cs.name as scheme_name,
          sr.id as reward_id,
          sr.reward_percentage,
          sr.calculation_method,
@@ -35,42 +39,17 @@ router.get('/', async (req: Request, res: Response) => {
        ORDER BY c.display_order, cs.display_order, sr.display_order`
     );
 
-    // 取得支付方式綁定卡片方案的額度
-    const paymentSchemeQuotasResult = await pool.query(
-      `SELECT 
-         cs.id as scheme_id,
-         pm.id as payment_method_id,
-         c.name || '-' || cs.name || '-' || pm.name as name,
-         sr.id as reward_id,
-         sr.reward_percentage,
-         sr.calculation_method,
-         sr.quota_limit,
-         sr.quota_refresh_type,
-         sr.quota_refresh_value,
-         sr.quota_refresh_date,
-         cs.activity_end_date,
-         sr.display_order,
-         qt.used_quota,
-         qt.remaining_quota,
-         qt.current_amount,
-         qt.next_refresh_at
-       FROM payment_scheme_links psl
-       JOIN card_schemes cs ON psl.scheme_id = cs.id
-       JOIN cards c ON cs.card_id = c.id
-       JOIN payment_methods pm ON psl.payment_method_id = pm.id
-       JOIN scheme_rewards sr ON cs.id = sr.scheme_id
-       LEFT JOIN quota_trackings qt ON cs.id = qt.scheme_id 
-         AND pm.id = qt.payment_method_id
-         AND sr.id = qt.reward_id
-       ORDER BY pm.display_order, cs.display_order, sr.display_order`
-    );
+    // 移除支付方式綁定卡片方案的額度查詢（因為使用信用卡方案額度）
 
     // 取得純支付方式的額度（只從 payment_rewards 表取得回饋組成）
     const paymentQuotasResult = await pool.query(
       `SELECT 
          NULL::uuid as scheme_id,
          pm.id as payment_method_id,
+         NULL::uuid as card_id,
+         pm.id as payment_method_id_for_group,
          pm.name,
+         pm.name as payment_method_name,
          pr.id as reward_id,
          pr.reward_percentage,
          pr.calculation_method,
@@ -92,10 +71,9 @@ router.get('/', async (req: Request, res: Response) => {
        ORDER BY pm.display_order, pr.display_order`
     );
 
-    // 組合所有結果並檢查是否需要刷新
+    // 組合所有結果並檢查是否需要刷新（移除支付方式綁定卡片方案）
     const allQuotas = [
       ...schemeQuotasResult.rows,
-      ...paymentSchemeQuotasResult.rows,
       ...paymentQuotasResult.rows,
     ];
 
@@ -193,39 +171,16 @@ router.get('/', async (req: Request, res: Response) => {
        ORDER BY c.display_order, cs.display_order, sr.display_order`
     );
 
-    const updatedPaymentSchemeQuotas = await pool.query(
-      `SELECT 
-         cs.id as scheme_id,
-         pm.id as payment_method_id,
-         c.name || '-' || cs.name || '-' || pm.name as name,
-         sr.id as reward_id,
-         sr.reward_percentage,
-         sr.calculation_method,
-         sr.quota_limit,
-         sr.quota_refresh_type,
-         sr.quota_refresh_value,
-         sr.quota_refresh_date,
-         cs.activity_end_date,
-         qt.used_quota,
-         qt.remaining_quota,
-         qt.current_amount,
-         qt.next_refresh_at
-       FROM payment_scheme_links psl
-       JOIN card_schemes cs ON psl.scheme_id = cs.id
-       JOIN cards c ON cs.card_id = c.id
-       JOIN payment_methods pm ON psl.payment_method_id = pm.id
-       JOIN scheme_rewards sr ON cs.id = sr.scheme_id
-       LEFT JOIN quota_trackings qt ON cs.id = qt.scheme_id 
-         AND pm.id = qt.payment_method_id
-         AND sr.id = qt.reward_id
-       ORDER BY pm.display_order, cs.display_order, sr.display_order`
-    );
+    // 移除支付方式綁定卡片方案的額度查詢（因為使用信用卡方案額度）
 
     const updatedPaymentQuotas = await pool.query(
       `SELECT 
          NULL::uuid as scheme_id,
          pm.id as payment_method_id,
+         NULL::uuid as card_id,
+         pm.id as payment_method_id_for_group,
          pm.name,
+         pm.name as payment_method_name,
          pr.id as reward_id,
          pr.reward_percentage,
          pr.calculation_method,
@@ -265,7 +220,7 @@ router.get('/', async (req: Request, res: Response) => {
       }>;
     }>();
 
-    [...updatedSchemeQuotas.rows, ...updatedPaymentSchemeQuotas.rows, ...updatedPaymentQuotas.rows].forEach((row) => {
+    [...updatedSchemeQuotas.rows, ...updatedPaymentQuotas.rows].forEach((row) => {
       const key = `${row.scheme_id || 'null'}_${row.payment_method_id || 'null'}`;
       const percentage = parseFloat(row.reward_percentage);
       const usedQuota = row.used_quota ? parseFloat(row.used_quota) : 0;
@@ -287,6 +242,11 @@ router.get('/', async (req: Request, res: Response) => {
       if (!quotaMap.has(key)) {
         quotaMap.set(key, {
           name: row.name,
+          cardId: row.card_id || null,
+          paymentMethodId: row.payment_method_id_for_group || null,
+          cardName: row.card_name || null,
+          paymentMethodName: row.payment_method_name || null,
+          schemeName: row.scheme_name || null,
           rewards: [],
         });
       }
@@ -361,6 +321,11 @@ router.get('/', async (req: Request, res: Response) => {
       if (!paymentQuotaMap.has(key)) {
         paymentQuotaMap.set(key, {
           name: row.name,
+          cardId: null,
+          paymentMethodId: row.payment_method_id,
+          cardName: null,
+          paymentMethodName: row.payment_method_name || row.name,
+          schemeName: null,
           rewards: [],
         });
       }
@@ -407,6 +372,11 @@ router.get('/', async (req: Request, res: Response) => {
         schemeId: schemeId === 'null' ? null : schemeId,
         paymentMethodId: paymentMethodId === 'null' ? null : paymentMethodId,
         name: quota.name,
+        cardId: quota.cardId,
+        paymentMethodIdForGroup: quota.paymentMethodId,
+        cardName: quota.cardName,
+        paymentMethodName: quota.paymentMethodName,
+        schemeName: quota.schemeName,
         rewardComposition: quota.rewards.map(r => `${r.percentage}%`).join('/'),
         calculationMethods: quota.rewards.map(r => r.calculationMethod),
         quotaLimits: quota.rewards.map(r => r.quotaLimit),
@@ -430,6 +400,11 @@ router.get('/', async (req: Request, res: Response) => {
         schemeId: null,
         paymentMethodId: paymentMethodId,
         name: quota.name,
+        cardId: quota.cardId,
+        paymentMethodIdForGroup: quota.paymentMethodId,
+        cardName: quota.cardName,
+        paymentMethodName: quota.paymentMethodName,
+        schemeName: quota.schemeName,
         rewardComposition: quota.rewards.map(r => `${r.percentage}%`).join('/'),
         calculationMethods: quota.rewards.map(r => r.calculationMethod),
         quotaLimits: quota.rewards.map(r => r.quotaLimit),

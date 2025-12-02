@@ -746,7 +746,7 @@ function CardItem({
                 {/* 適用通路 */}
                 <div>
                   <label className="block text-xs text-gray-600 mb-1">
-                    適用通路（每行一個通路名稱，可在名稱後加上備註，格式：通路名稱 (備註)）
+                    適用通路（每行一個通路名稱，可在名稱後加上備註，格式：ABC(123)，其中 ABC 為通路名稱，123 為通路備註）
                   </label>
                   <textarea
                     value={channelApplicationsText}
@@ -914,7 +914,7 @@ function CardItem({
                           {/* 適用通路 */}
                           <div>
                             <label className="block text-xs text-gray-600 mb-1">
-                              適用通路（每行一個通路名稱，可在名稱後加上備註，格式：通路名稱 (備註)）
+                              適用通路（每行一個通路名稱，可在名稱後加上備註，格式：ABC(123)，其中 ABC 為通路名稱，123 為通路備註）
                             </label>
                             <textarea
                               value={channelApplicationsText}
@@ -1433,7 +1433,7 @@ function PaymentMethodItem({
               <div className="space-y-2">
                 <div>
                   <label className="text-xs font-medium block mb-1">
-                    適用通路（每行一個通路名稱，可在名稱後加上備註，格式：通路名稱 (備註)）
+                    適用通路（每行一個通路名稱，可在名稱後加上備註，格式：ABC(123)，其中 ABC 為通路名稱，123 為通路備註）
                   </label>
                   <textarea
                     value={channelApplicationsText}
@@ -3288,12 +3288,17 @@ function TransactionSettings() {
       return;
     }
     try {
+      // 計算新的 displayOrder（確保新增到最下面）
+      const maxDisplayOrder = schemes.length > 0 
+        ? Math.max(...schemes.map(s => s.display_order ?? 0)) 
+        : -1;
+      
       const submitData: {
         schemeId?: string;
         paymentMethodId?: string;
         displayOrder: number;
       } = {
-        displayOrder: schemes.length,
+        displayOrder: maxDisplayOrder + 1,
       };
       if (formData.selectedType === 'card') {
         submitData.schemeId = formData.selectedSchemeId;
@@ -3910,14 +3915,22 @@ function QuotaSettings() {
     quotaRefreshTypes?: Array<string | null>;
     quotaRefreshValues?: Array<number | null>;
     quotaRefreshDates?: Array<string | null>;
+    cardId?: string | null;
+    paymentMethodIdForGroup?: string | null;
+    cardName?: string | null;
+    paymentMethodName?: string | null;
+    schemeName?: string | null;
   }>>([]);
   const [editingQuota, setEditingQuota] = useState<{
     quotaIndex: number;
     rewardIndex: number;
+    groupKey: string;
   } | null>(null);
   const [editForm, setEditForm] = useState({
     usedQuotaAdjustment: '', // 僅允許增減，例如 +7 或 -5
   });
+  const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
+  const [expandedPayments, setExpandedPayments] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     loadQuotas();
@@ -4015,16 +4028,37 @@ function QuotaSettings() {
     );
   };
 
-  const handleEdit = (quotaIndex: number, rewardIndex: number) => {
-    setEditingQuota({ quotaIndex, rewardIndex });
+  const handleEdit = (quotaIndex: number, rewardIndex: number, groupKey: string) => {
+    setEditingQuota({ quotaIndex, rewardIndex, groupKey });
     setEditForm({
       usedQuotaAdjustment: '', // 空值，用戶可以輸入 +7 或 -5
     });
   };
 
+  const toggleCard = (cardId: string) => {
+    const newExpanded = new Set(expandedCards);
+    if (newExpanded.has(cardId)) {
+      newExpanded.delete(cardId);
+    } else {
+      newExpanded.add(cardId);
+    }
+    setExpandedCards(newExpanded);
+  };
+
+  const togglePayment = (paymentId: string) => {
+    const newExpanded = new Set(expandedPayments);
+    if (newExpanded.has(paymentId)) {
+      newExpanded.delete(paymentId);
+    } else {
+      newExpanded.add(paymentId);
+    }
+    setExpandedPayments(newExpanded);
+  };
+
   const handleSave = async () => {
     if (!editingQuota) return;
     const quota = quotas[editingQuota.quotaIndex];
+    if (!quota) return;
     const rewardId = quota.rewardIds[editingQuota.rewardIndex];
 
     if (!quota.schemeId || !rewardId) {
@@ -4102,6 +4136,7 @@ function QuotaSettings() {
   const [editingReward, setEditingReward] = useState<{
     quotaIndex: number;
     rewardIndex: number;
+    groupKey: string;
   } | null>(null);
   const [rewardEditForm, setRewardEditForm] = useState({
     rewardPercentage: '',
@@ -4112,8 +4147,10 @@ function QuotaSettings() {
     quotaRefreshDate: '',
   });
 
-  const handleEditReward = (quotaIndex: number, rewardIndex: number) => {
+  const handleEditReward = (quotaIndex: number, rewardIndex: number, groupKey: string) => {
     const quota = quotas[quotaIndex];
+    if (!quota) return;
+    
     const rewardPercentage = quota.rewardComposition?.split('/')[rewardIndex]?.replace('%', '') || '';
     const calculationMethod = quota.calculationMethods?.[rewardIndex] || 'round';
     const quotaLimit = quota.quotaLimits?.[rewardIndex] ?? null;
@@ -4121,7 +4158,7 @@ function QuotaSettings() {
     const quotaRefreshValue = quota.quotaRefreshValues?.[rewardIndex] ?? null;
     const quotaRefreshDate = quota.quotaRefreshDates?.[rewardIndex] || null;
     
-    setEditingReward({ quotaIndex, rewardIndex });
+    setEditingReward({ quotaIndex, rewardIndex, groupKey });
     setRewardEditForm({
       rewardPercentage,
       calculationMethod,
@@ -4135,22 +4172,39 @@ function QuotaSettings() {
   const handleSaveReward = async () => {
     if (!editingReward) return;
     const quota = quotas[editingReward.quotaIndex];
+    if (!quota) return;
     const rewardId = quota.rewardIds[editingReward.rewardIndex];
 
-    if (!quota.schemeId || !rewardId) {
+    if (!rewardId) {
       alert('無法編輯：缺少必要資訊');
       return;
     }
 
     try {
-      await api.put(`/schemes/${quota.schemeId}/rewards/${rewardId}`, {
-        rewardPercentage: parseFloat(rewardEditForm.rewardPercentage) || 0,
-        calculationMethod: rewardEditForm.calculationMethod,
-        quotaLimit: rewardEditForm.quotaLimit ? parseFloat(rewardEditForm.quotaLimit) : null,
-        quotaRefreshType: rewardEditForm.quotaRefreshType || null,
-        quotaRefreshValue: rewardEditForm.quotaRefreshValue ? parseInt(rewardEditForm.quotaRefreshValue) : null,
-        quotaRefreshDate: rewardEditForm.quotaRefreshDate || null,
-      });
+      // 如果是卡片方案，使用 /schemes/:id/rewards/:rewardId
+      // 如果是支付方式，使用 /payment-methods/:id/rewards/:rewardId
+      if (quota.schemeId) {
+        await api.put(`/schemes/${quota.schemeId}/rewards/${rewardId}`, {
+          rewardPercentage: parseFloat(rewardEditForm.rewardPercentage) || 0,
+          calculationMethod: rewardEditForm.calculationMethod,
+          quotaLimit: rewardEditForm.quotaLimit ? parseFloat(rewardEditForm.quotaLimit) : null,
+          quotaRefreshType: rewardEditForm.quotaRefreshType || null,
+          quotaRefreshValue: rewardEditForm.quotaRefreshValue ? parseInt(rewardEditForm.quotaRefreshValue) : null,
+          quotaRefreshDate: rewardEditForm.quotaRefreshDate || null,
+        });
+      } else if (quota.paymentMethodId) {
+        await api.put(`/payment-methods/${quota.paymentMethodId}/rewards/${rewardId}`, {
+          rewardPercentage: parseFloat(rewardEditForm.rewardPercentage) || 0,
+          calculationMethod: rewardEditForm.calculationMethod,
+          quotaLimit: rewardEditForm.quotaLimit ? parseFloat(rewardEditForm.quotaLimit) : null,
+          quotaRefreshType: rewardEditForm.quotaRefreshType || null,
+          quotaRefreshValue: rewardEditForm.quotaRefreshValue ? parseInt(rewardEditForm.quotaRefreshValue) : null,
+          quotaRefreshDate: rewardEditForm.quotaRefreshDate || null,
+        });
+      } else {
+        alert('無法編輯：缺少必要資訊');
+        return;
+      }
       alert('回饋組成已更新');
       setEditingReward(null);
       loadQuotas();
@@ -4160,16 +4214,35 @@ function QuotaSettings() {
     }
   };
 
-  return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h3 className="text-lg font-semibold">額度管理設定</h3>
-        <div className="text-sm font-mono text-gray-700 bg-gray-100 px-4 py-2 rounded border">
-          {currentTime}
-        </div>
-      </div>
+  // 將額度分為兩類：信用卡、支付方式（移除信用卡綁定支付方式）
+  const cardQuotas = quotas.filter(q => q.schemeId && !q.paymentMethodId);
+  const paymentQuotas = quotas.filter(q => !q.schemeId && q.paymentMethodId);
 
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+  // 按卡片分組
+  const cardGroups = new Map<string, typeof quotas>();
+  cardQuotas.forEach(quota => {
+    const cardId = quota.cardId || 'unknown';
+    if (!cardGroups.has(cardId)) {
+      cardGroups.set(cardId, []);
+    }
+    cardGroups.get(cardId)!.push(quota);
+  });
+
+  // 按支付方式分組
+  const paymentGroups = new Map<string, typeof quotas>();
+  paymentQuotas.forEach(quota => {
+    const paymentId = quota.paymentMethodIdForGroup || quota.paymentMethodId || 'unknown';
+    if (!paymentGroups.has(paymentId)) {
+      paymentGroups.set(paymentId, []);
+    }
+    paymentGroups.get(paymentId)!.push(quota);
+  });
+
+  const renderQuotaTable = (quotaList: typeof quotas, groupKey: string) => {
+    if (quotaList.length === 0) return null;
+    
+    return (
+      <div className="border-t border-gray-200 p-4">
         <div className="overflow-x-auto" style={{ maxHeight: 'calc(100vh - 250px)' }}>
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gradient-to-r from-gray-50 to-gray-100 sticky top-0 z-20 shadow-sm">
@@ -4204,7 +4277,14 @@ function QuotaSettings() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {quotas.map((quota, quotaIndex) => {
+              {quotaList.map((quota, localQuotaIndex) => {
+                // 找到全局索引
+                const globalQuotaIndex = quotas.findIndex(q => 
+                  q.schemeId === quota.schemeId && 
+                  q.paymentMethodId === quota.paymentMethodId &&
+                  q.name === quota.name
+                );
+                const quotaIndex = globalQuotaIndex >= 0 ? globalQuotaIndex : localQuotaIndex;
                 // 處理 rewardIds：如果為空但 rewardComposition 有值，則使用 rewardComposition 的長度
                 let validRewardIndices: number[] = [];
                 
@@ -4241,7 +4321,7 @@ function QuotaSettings() {
                   const quotaLimit = quota.quotaLimits?.[originalIndex] ?? null;
                   const currentAmount = quota.currentAmounts?.[originalIndex] || 0;
                   const referenceAmount = quota.referenceAmounts?.[originalIndex] ?? null;
-                  const isEditing = editingQuota?.quotaIndex === quotaIndex && editingQuota?.rewardIndex === originalIndex;
+                  const isEditing = editingQuota?.quotaIndex === quotaIndex && editingQuota?.rewardIndex === originalIndex && editingQuota?.groupKey === groupKey;
                   
                   return (
                     <tr key={`${quotaIndex}-${originalIndex}`} className={`${bgColor} ${borderColor} border-l-4 hover:bg-blue-100 transition-colors`}>
@@ -4250,19 +4330,42 @@ function QuotaSettings() {
                           className={`px-4 py-3 text-sm font-medium sticky left-0 ${bgColor} z-10 border-r border-gray-200`}
                           rowSpan={rewardCount}
                         >
-                          <div className="font-semibold text-gray-900">{quota.name}</div>
+                          <div className="font-semibold text-gray-900">{quota.schemeName || quota.name}</div>
                         </td>
                       )}
                       <td className="px-4 py-3 text-sm">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
-                          {rewardPercentage || '-'}%
-                        </span>
+                        {editingReward?.quotaIndex === quotaIndex && editingReward?.rewardIndex === originalIndex && editingReward?.groupKey === groupKey ? (
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={rewardEditForm.rewardPercentage}
+                            onChange={(e) => setRewardEditForm({ ...rewardEditForm, rewardPercentage: e.target.value })}
+                            className="w-20 px-2 py-1 border rounded text-xs"
+                            placeholder="0"
+                          />
+                        ) : (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                            {rewardPercentage || '-'}%
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-600">
-                        {calculationMethodText}
+                        {editingReward?.quotaIndex === quotaIndex && editingReward?.rewardIndex === originalIndex && editingReward?.groupKey === groupKey ? (
+                          <select
+                            value={rewardEditForm.calculationMethod}
+                            onChange={(e) => setRewardEditForm({ ...rewardEditForm, calculationMethod: e.target.value })}
+                            className="w-full px-2 py-1 border rounded text-xs"
+                          >
+                            <option value="round">四捨五入</option>
+                            <option value="floor">無條件捨去</option>
+                            <option value="ceil">無條件進位</option>
+                          </select>
+                        ) : (
+                          calculationMethodText
+                        )}
                       </td>
                       <td className="px-4 py-3 text-sm">
-                        {editingReward?.quotaIndex === quotaIndex && editingReward?.rewardIndex === originalIndex ? (
+                        {editingReward?.quotaIndex === quotaIndex && editingReward?.rewardIndex === originalIndex && editingReward?.groupKey === groupKey ? (
                           <input
                             type="number"
                             step="0.01"
@@ -4291,28 +4394,45 @@ function QuotaSettings() {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-sm">
-                        {isEditing ? (
+                        {(isEditing || (editingReward?.quotaIndex === quotaIndex && editingReward?.rewardIndex === originalIndex && editingReward?.groupKey === groupKey)) ? (
                           <div className="flex gap-1">
                             <button
-                              onClick={handleSave}
+                              onClick={() => {
+                                if (isEditing) {
+                                  handleSave();
+                                } else if (editingReward?.quotaIndex === quotaIndex && editingReward?.rewardIndex === originalIndex) {
+                                  handleSaveReward();
+                                }
+                              }}
                               className="px-2 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 transition-colors"
                             >
                               儲存
                             </button>
                             <button
-                              onClick={() => setEditingQuota(null)}
+                              onClick={() => {
+                                setEditingQuota(null);
+                                setEditingReward(null);
+                              }}
                               className="px-2 py-1 bg-gray-500 text-white rounded text-xs hover:bg-gray-600 transition-colors"
                             >
                               取消
                             </button>
                           </div>
                         ) : (
-                          <button
-                            onClick={() => handleEdit(quotaIndex, originalIndex)}
-                            className="px-2 py-1 bg-yellow-500 text-white rounded text-xs hover:bg-yellow-600 transition-colors"
-                          >
-                            編輯
-                          </button>
+                          <div className="flex gap-1">
+                            <button
+                              onClick={() => handleEdit(quotaIndex, originalIndex, groupKey)}
+                              className="px-2 py-1 bg-yellow-500 text-white rounded text-xs hover:bg-yellow-600 transition-colors"
+                            >
+                              編輯額度
+                            </button>
+                            <button
+                              onClick={() => handleEditReward(quotaIndex, originalIndex, groupKey)}
+                              className="px-2 py-1 bg-purple-500 text-white rounded text-xs hover:bg-purple-600 transition-colors"
+                            >
+                              編輯回饋
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -4323,6 +4443,73 @@ function QuotaSettings() {
           </table>
         </div>
       </div>
+    );
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h3 className="text-lg font-semibold">額度管理設定</h3>
+        <div className="text-sm font-mono text-gray-700 bg-gray-100 px-4 py-2 rounded border">
+          {currentTime}
+        </div>
+      </div>
+
+      {/* 信用卡區塊 */}
+      {cardGroups.size > 0 && (
+        <div className="mb-8">
+          <h3 className="text-xl font-semibold mb-4 text-gray-800">信用卡</h3>
+          <div className="space-y-2">
+            {Array.from(cardGroups.entries()).map(([cardId, quotas]) => {
+              const cardName = quotas[0]?.cardName || '未知卡片';
+              const isExpanded = expandedCards.has(cardId);
+              return (
+                <div key={cardId} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                  <button
+                    onClick={() => toggleCard(cardId)}
+                    className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors"
+                  >
+                    <span className="font-medium text-gray-900">{cardName}</span>
+                    <span className="text-gray-500">{isExpanded ? '▼' : '▶'}</span>
+                  </button>
+                  {isExpanded && renderQuotaTable(quotas, `card_${cardId}`)}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 支付方式區塊 */}
+      {paymentGroups.size > 0 && (
+        <div className="mb-8">
+          <h3 className="text-xl font-semibold mb-4 text-gray-800">支付方式</h3>
+          <div className="space-y-2">
+            {Array.from(paymentGroups.entries()).map(([paymentId, quotas]) => {
+              const paymentName = quotas[0]?.paymentMethodName || quotas[0]?.name || '未知支付方式';
+              const isExpanded = expandedPayments.has(paymentId);
+              return (
+                <div key={paymentId} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                  <button
+                    onClick={() => togglePayment(paymentId)}
+                    className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors"
+                  >
+                    <span className="font-medium text-gray-900">{paymentName}</span>
+                    <span className="text-gray-500">{isExpanded ? '▼' : '▶'}</span>
+                  </button>
+                  {isExpanded && renderQuotaTable(quotas, `payment_${paymentId}`)}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {cardGroups.size === 0 && paymentGroups.size === 0 && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <p className="text-yellow-800">目前沒有任何額度資料。請先新增卡片方案或支付方式並設定回饋組成。</p>
+        </div>
+      )}
     </div>
   );
 }

@@ -315,20 +315,15 @@ router.put('/:id/batch', async (req: Request, res: Response) => {
       // 刪除現有的排除通路
       await client.query('DELETE FROM scheme_channel_exclusions WHERE scheme_id = $1', [id]);
 
-      // 批量插入排除通路
+      // 批量插入排除通路（優化：使用 UNNEST）
       if (Array.isArray(exclusions) && exclusions.length > 0) {
         const validExclusions = exclusions.filter((channelId: string) => channelId);
         if (validExclusions.length > 0) {
-          const values = validExclusions.map((_: string, idx: number) => 
-            `($1, $${idx + 2})`
-          ).join(', ');
-          const params = [id, ...validExclusions];
-          
           await client.query(
             `INSERT INTO scheme_channel_exclusions (scheme_id, channel_id)
-             VALUES ${values}
+             SELECT $1, unnest($2::uuid[])
              ON CONFLICT (scheme_id, channel_id) DO NOTHING`,
-            params
+            [id, validExclusions]
           );
         }
       }
