@@ -204,6 +204,11 @@ router.get('/', async (req: Request, res: Response) => {
     // 組織資料格式 - 按方案和回饋組成正確分組
     const quotaMap = new Map<string, {
       name: string;
+      cardId: string | null;
+      paymentMethodId: string | null;
+      cardName: string | null;
+      paymentMethodName: string | null;
+      schemeName: string | null;
       rewards: Array<{
         percentage: number;
         rewardId: string;
@@ -287,6 +292,11 @@ router.get('/', async (req: Request, res: Response) => {
     // 處理純支付方式的額度（從 payment_rewards 表取得回饋組成）
     const paymentQuotaMap = new Map<string, {
       name: string;
+      cardId: string | null;
+      paymentMethodId: string | null;
+      cardName: string | null;
+      paymentMethodName: string | null;
+      schemeName: string | null;
       rewards: Array<{
         percentage: number;
         rewardId: string;
