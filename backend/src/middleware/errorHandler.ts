@@ -19,9 +19,21 @@ export const errorHandler = (
   // 記錄錯誤（生產環境不顯示堆疊）
   const isDevelopment = process.env.NODE_ENV === 'development';
   
+  // 如果是資料庫錯誤，記錄更詳細的資訊
+  const isDatabaseError = err.message.includes('password authentication') || 
+                          err.message.includes('database') ||
+                          err.message.includes('connection') ||
+                          (err as any).code?.startsWith('28') || // PostgreSQL connection errors
+                          (err as any).code === 'ECONNREFUSED';
+  
   console.error('錯誤:', {
     message: err.message,
     code,
+    ...(isDatabaseError && {
+      dbErrorCode: (err as any).code,
+      dbDetail: (err as any).detail,
+      dbHint: (err as any).hint,
+    }),
     stack: isDevelopment ? err.stack : undefined,
     path: req.path,
     method: req.method,

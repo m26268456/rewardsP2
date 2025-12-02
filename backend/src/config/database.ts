@@ -16,13 +16,21 @@ if (!databaseUrl) {
   const dbHost = isDocker ? 'postgres' : 'localhost';
   const dbPort = isDocker ? '5432' : '5433'; // Docker 內部用 5432，本地映射到 5433
   databaseUrl = `postgresql://rewards_user:rewards_password@${dbHost}:${dbPort}/rewards_db`;
+  console.log('⚠️  未設定 DATABASE_URL，使用預設連接字串');
 } else {
   // Railway 環境：直接使用提供的 DATABASE_URL，不需要修改
   if (isRailway) {
     console.log('✅ 使用 Railway 提供的 DATABASE_URL');
   }
+  
+  // 確保連接字串使用 postgresql:// 協議（Railway 可能使用 postgres://）
+  if (databaseUrl.startsWith('postgres://')) {
+    databaseUrl = databaseUrl.replace('postgres://', 'postgresql://');
+    console.log('✅ 已將 postgres:// 轉換為 postgresql://');
+  }
+  
   // 如果設定了 DATABASE_URL，但主機名是 postgres 且不在 Docker 環境，嘗試替換為 localhost
-  else if (databaseUrl.includes('@postgres:') && !isDocker) {
+  else if (databaseUrl.includes('@postgres:') && !isDocker && !isRailway) {
     // 替換 postgres:5432 為 localhost:5433
     databaseUrl = databaseUrl.replace('@postgres:5432', '@localhost:5433');
     console.warn('⚠️  已將資料庫主機從 postgres:5432 改為 localhost:5433（本地開發環境）');
@@ -36,7 +44,23 @@ if (databaseUrl.match(/\/rewards_user$/)) {
   console.warn('⚠️  修正了數據庫名稱從 rewards_user 到 rewards_db');
 }
 
-console.log('📊 資料庫連接字串:', databaseUrl.replace(/:[^:@]+@/, ':****@')); // 隱藏密碼
+// 解析連接字串以驗證格式
+try {
+  const url = new URL(databaseUrl);
+  console.log('📊 資料庫連接資訊:', {
+    protocol: url.protocol,
+    host: url.hostname,
+    port: url.port || '5432 (預設)',
+    database: url.pathname.replace('/', ''),
+    user: url.username || '未設定',
+    hasPassword: !!url.password,
+    isRailway: !!isRailway,
+  });
+  console.log('📊 完整連接字串（隱藏密碼）:', databaseUrl.replace(/:[^:@]+@/, ':****@'));
+} catch (error) {
+  console.error('❌ DATABASE_URL 格式錯誤:', error);
+  throw new Error('DATABASE_URL 格式不正確，請檢查環境變數設定');
+}
 
 /**
  * 優化的資料庫連接池配置
@@ -59,18 +83,50 @@ export const pool = new Pool({
 });
 
 // 測試資料庫連線
-pool.on('connect', () => {
+pool.on('connect', (client) => {
   console.log('✅ 資料庫連線成功');
 });
 
 pool.on('error', (err) => {
-  console.error('❌ 資料庫連線錯誤:', err);
+  console.error('❌ 資料庫連線錯誤:', {
+    message: err.message,
+    code: (err as any).code,
+    detail: (err as any).detail,
+    hint: (err as any).hint,
+    position: (err as any).position,
+  });
   // 在生產環境中，可以考慮發送警報
   if (process.env.NODE_ENV === 'production') {
     // 這裡可以添加日誌服務或警報系統
     console.error('生產環境資料庫錯誤，請檢查資料庫服務狀態');
   }
 });
+
+// 在啟動時測試資料庫連接
+(async () => {
+  try {
+    const client = await pool.connect();
+    const result = await client.query('SELECT NOW() as current_time, current_database() as db_name');
+    console.log('✅ 資料庫連接測試成功:', {
+      currentTime: result.rows[0].current_time,
+      databaseName: result.rows[0].db_name,
+    });
+    client.release();
+  } catch (error: any) {
+    console.error('❌ 資料庫連接測試失敗:', {
+      message: error.message,
+      code: error.code,
+      detail: error.detail,
+      hint: error.hint,
+    });
+    console.error('💡 請檢查：');
+    console.error('   1. DATABASE_URL 環境變數是否正確設定');
+    console.error('   2. 資料庫服務是否正在運行');
+    console.error('   3. 資料庫用戶名和密碼是否正確');
+    console.error('   4. 資料庫名稱是否存在');
+    // 不拋出錯誤，讓應用程式繼續啟動（連接池會在需要時重試）
+  }
+})();
 
 // 優雅關閉連接池
 process.on('SIGTERM', async () => {
