@@ -149,7 +149,11 @@ router.get('/', async (req: Request, res: Response) => {
       `SELECT 
          cs.id as scheme_id,
          NULL::uuid as payment_method_id,
+         c.id as card_id,
+         NULL::uuid as payment_method_id_for_group,
          c.name || '-' || cs.name as name,
+         c.name as card_name,
+         cs.name as scheme_name,
          sr.id as reward_id,
          sr.reward_percentage,
          sr.calculation_method,

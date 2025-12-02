@@ -717,32 +717,6 @@ function CardItem({
                     />
                   </div>
                 </div>
-                {/* 共同回饋綁定 */}
-                <div>
-                  <label className="block text-xs text-gray-600 mb-1">
-                    共同回饋綁定
-                    <span className="text-gray-400 text-[10px] ml-1">（選擇同卡片中已設定回饋的方案，將共用該方案的回饋組成）</span>
-                  </label>
-                  <select
-                    value={schemeFormData.sharedRewardGroupId}
-                    onChange={(e) => setSchemeFormData({ ...schemeFormData, sharedRewardGroupId: e.target.value })}
-                    className="w-full px-2 py-1 border rounded text-sm"
-                  >
-                    <option value="">不使用（使用自己的回饋組成）</option>
-                    {schemes
-                      .filter(s => !editingScheme || s.id !== editingScheme.id) // 排除自己
-                      .map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name}
-                        </option>
-                      ))}
-                  </select>
-                  {schemeFormData.sharedRewardGroupId && (
-                    <div className="mt-1 text-xs text-blue-600 bg-blue-50 p-2 rounded">
-                      💡 此方案將與「{schemes.find(s => s.id === schemeFormData.sharedRewardGroupId)?.name}」共用回饋組成
-                    </div>
-                  )}
-                </div>
                 {/* 適用通路 */}
                 <div>
                   <label className="block text-xs text-gray-600 mb-1">
@@ -887,30 +861,6 @@ function CardItem({
                           </div>
                           {/* 共同回饋綁定 */}
                           <div>
-                            <label className="block text-xs text-gray-600 mb-1">
-                              共同回饋綁定
-                              <span className="text-gray-400 text-[10px] ml-1">（選擇同卡片中已設定回饋的方案，將共用該方案的回饋組成）</span>
-                            </label>
-                            <select
-                              value={schemeFormData.sharedRewardGroupId}
-                              onChange={(e) => setSchemeFormData({ ...schemeFormData, sharedRewardGroupId: e.target.value })}
-                              className="w-full px-2 py-1 border rounded text-sm"
-                            >
-                              <option value="">不使用（使用自己的回饋組成）</option>
-                              {schemes
-                                .filter(s => s.id !== editingScheme.id) // 排除自己
-                                .map((s) => (
-                                  <option key={s.id} value={s.id}>
-                                    {s.name}
-                                  </option>
-                                ))}
-                            </select>
-                            {schemeFormData.sharedRewardGroupId && (
-                              <div className="mt-1 text-xs text-blue-600 bg-blue-50 p-2 rounded">
-                                💡 此方案將與「{schemes.find(s => s.id === schemeFormData.sharedRewardGroupId)?.name}」共用回饋組成
-                              </div>
-                            )}
-                          </div>
                           {/* 適用通路 */}
                           <div>
                             <label className="block text-xs text-gray-600 mb-1">
@@ -4218,10 +4168,15 @@ function QuotaSettings() {
   const cardQuotas = quotas.filter(q => q.schemeId && !q.paymentMethodId);
   const paymentQuotas = quotas.filter(q => !q.schemeId && q.paymentMethodId);
 
-  // 按卡片分組
+  // 按卡片分組（直接列出所有卡片，不使用"未知卡片"）
   const cardGroups = new Map<string, typeof quotas>();
   cardQuotas.forEach(quota => {
-    const cardId = quota.cardId || 'unknown';
+    // 如果沒有 cardId，跳過（不應該發生，但為了安全）
+    if (!quota.cardId) {
+      console.warn('額度資料缺少 cardId:', quota);
+      return;
+    }
+    const cardId = quota.cardId;
     if (!cardGroups.has(cardId)) {
       cardGroups.set(cardId, []);
     }
@@ -4461,7 +4416,7 @@ function QuotaSettings() {
           <h3 className="text-xl font-semibold mb-4 text-gray-800">信用卡</h3>
           <div className="space-y-2">
             {Array.from(cardGroups.entries()).map(([cardId, quotas]) => {
-              const cardName = quotas[0]?.cardName || '未知卡片';
+              const cardName = quotas[0]?.cardName || cardId;
               const isExpanded = expandedCards.has(cardId);
               return (
                 <div key={cardId} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">

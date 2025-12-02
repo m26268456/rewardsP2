@@ -215,24 +215,19 @@ function matchesChannelName(keyword: string, channelName: string): { matched: bo
   }
   
   // 允許部分匹配（關鍵字包含在名稱中，或名稱包含在關鍵字中）
-  // 這樣可以支持部分關鍵字查詢，例如 "蝦皮" 可以匹配 "蝦皮購物Shopee"
-  if (normalizedKeyword.length >= 2) {
-    // 檢查關鍵字是否在名稱中（部分匹配）
-    if (baseNameLower.includes(normalizedKeyword) || normalizedKeyword.includes(baseNameLower)) {
+  // 這樣可以支持部分關鍵字查詢，例如 "NET" 可以匹配 "NET" 和 "NETFLIX"，"蝦皮" 可以匹配 "蝦皮購物"、"蝦皮"
+  if (normalizedKeyword.length >= 1) {
+    // 檢查關鍵字是否在名稱中（簡單包含匹配）
+    if (baseNameLower.includes(normalizedKeyword) || fullNameLower.includes(normalizedKeyword)) {
       return { matched: true, isExact: false, isAlias: false };
     }
     
     // 檢查別稱中的部分匹配
     for (const alias of aliases) {
       const aliasLower = alias.toLowerCase();
-      if (aliasLower.includes(normalizedKeyword) || normalizedKeyword.includes(aliasLower)) {
+      if (aliasLower.includes(normalizedKeyword)) {
         return { matched: true, isExact: false, isAlias: true };
       }
-    }
-    
-    // 檢查完整名稱（包含別稱）
-    if (fullNameLower.includes(normalizedKeyword) || normalizedKeyword.includes(fullNameLower)) {
-      return { matched: true, isExact: false, isAlias: false };
     }
   }
   

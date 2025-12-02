@@ -75,10 +75,15 @@ export default function QuotaQuery() {
   const cardQuotas = quotas.filter(q => q.schemeId && !q.paymentMethodId);
   const paymentQuotas = quotas.filter(q => !q.schemeId && q.paymentMethodId);
 
-  // 按卡片分組
+  // 按卡片分組（直接列出所有卡片，不使用"未知卡片"）
   const cardGroups = new Map<string, QuotaInfo[]>();
   cardQuotas.forEach(quota => {
-    const cardId = quota.cardId || 'unknown';
+    // 如果沒有 cardId，跳過（不應該發生，但為了安全）
+    if (!quota.cardId) {
+      console.warn('額度資料缺少 cardId:', quota);
+      return;
+    }
+    const cardId = quota.cardId;
     if (!cardGroups.has(cardId)) {
       cardGroups.set(cardId, []);
     }
@@ -316,7 +321,7 @@ export default function QuotaQuery() {
           <h3 className="text-xl font-semibold mb-4 text-gray-800">信用卡</h3>
           <div className="space-y-2">
             {Array.from(cardGroups.entries()).map(([cardId, quotas]) => {
-              const cardName = quotas[0]?.cardName || '未知卡片';
+              const cardName = quotas[0]?.cardName || cardId;
               const isExpanded = expandedCards.has(cardId);
               return (
                 <div key={cardId} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">

@@ -301,7 +301,7 @@ router.put('/:id/batch', async (req: Request, res: Response) => {
         if (validApps.length > 0) {
           // 使用 UNNEST 進行批量插入
           const channelIds = validApps.map((app: any) => app.channelId);
-          const notes = validApps.map((app: any) => app.note || null);
+          const notes = validApps.map((app: any) => (app.note ? String(app.note) : null));
           
           await client.query(
             `INSERT INTO scheme_channel_applications (scheme_id, channel_id, note)
@@ -445,7 +445,7 @@ router.put('/:id/channels', async (req: Request, res: Response) => {
         if (validApps.length > 0) {
           // 使用 UNNEST 進行批量插入
           const channelIds = validApps.map((app: any) => app.channelId);
-          const notes = validApps.map((app: any) => app.note || null);
+          const notes = validApps.map((app: any) => (app.note ? String(app.note) : null));
           
           await client.query(
             `INSERT INTO scheme_channel_applications (scheme_id, channel_id, note)
@@ -508,20 +508,20 @@ router.put('/:id/rewards', async (req: Request, res: Response) => {
         const validRewards = rewards.filter((r: any) => r.percentage !== undefined);
         if (validRewards.length > 0) {
           // 使用 UNNEST 進行批量插入
-          const percentages = validRewards.map((r: any) => r.percentage);
-          const calculationMethods = validRewards.map((r: any) => r.calculationMethod || 'round');
-          const quotaLimits = validRewards.map((r: any) => r.quotaLimit || null);
-          const quotaRefreshTypes = validRewards.map((r: any) => r.quotaRefreshType || null);
-          const quotaRefreshValues = validRewards.map((r: any) => r.quotaRefreshValue || null);
-          const quotaRefreshDates = validRewards.map((r: any) => r.quotaRefreshDate || null);
-          const displayOrders = validRewards.map((r: any, idx: number) => r.displayOrder !== undefined ? r.displayOrder : idx);
+          const percentages = validRewards.map((r: any) => parseFloat(r.percentage) || 0);
+          const calculationMethods = validRewards.map((r: any) => String(r.calculationMethod || 'round'));
+          const quotaLimits = validRewards.map((r: any) => (r.quotaLimit !== null && r.quotaLimit !== undefined) ? parseFloat(r.quotaLimit) : null);
+          const quotaRefreshTypes = validRewards.map((r: any) => (r.quotaRefreshType ? String(r.quotaRefreshType) : null));
+          const quotaRefreshValues = validRewards.map((r: any) => (r.quotaRefreshValue !== null && r.quotaRefreshValue !== undefined) ? parseInt(String(r.quotaRefreshValue)) : null);
+          const quotaRefreshDates = validRewards.map((r: any) => (r.quotaRefreshDate ? String(r.quotaRefreshDate) : null));
+          const displayOrders = validRewards.map((r: any, idx: number) => (r.displayOrder !== undefined && r.displayOrder !== null) ? parseInt(String(r.displayOrder)) : idx);
 
           await client.query(
             `INSERT INTO scheme_rewards 
              (scheme_id, reward_percentage, calculation_method, quota_limit, 
               quota_refresh_type, quota_refresh_value, quota_refresh_date, display_order)
-             SELECT $1, unnest($2::numeric[]), unnest($3::text[]), unnest($4::numeric[]),
-                    unnest($5::text[]), unnest($6::numeric[]), unnest($7::date[]), unnest($8::integer[])`,
+             SELECT $1::uuid, unnest($2::numeric[]), unnest($3::text[]), unnest($4::numeric[]),
+                    unnest($5::text[]), unnest($6::integer[]), unnest($7::date[]), unnest($8::integer[])`,
             [
               id,
               percentages,

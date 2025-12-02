@@ -91,14 +91,17 @@ function matchesChannelName(keyword: string, channelName: string): { matched: bo
     }
   }
   
-  // 如果關鍵字長度足夠，允許部分匹配
-  if (normalizedKeyword.length >= 3) {
+  // 允許部分匹配（關鍵字包含在名稱中）
+  // 例如 "NET" 可以匹配 "NET" 和 "NETFLIX"，"蝦皮" 可以匹配 "蝦皮購物"、"蝦皮"
+  if (normalizedKeyword.length >= 1) {
     if (baseNameLower.includes(normalizedKeyword) || fullNameLower.includes(normalizedKeyword)) {
-      const keywordAsWord = new RegExp(`\\b${normalizedKeyword}`, 'i');
-      const keywordInWord = new RegExp(`${normalizedKeyword}\\b`, 'i');
-      
-      if (keywordAsWord.test(fullNameLower) || keywordInWord.test(fullNameLower)) {
-        return { matched: true, isExact: false, isAlias: false };
+      return { matched: true, isExact: false, isAlias: false };
+    }
+    
+    // 檢查別稱中的部分匹配
+    for (const alias of aliases) {
+      if (alias.toLowerCase().includes(normalizedKeyword)) {
+        return { matched: true, isExact: false, isAlias: true };
       }
     }
   }
