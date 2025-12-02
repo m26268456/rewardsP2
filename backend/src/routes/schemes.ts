@@ -296,8 +296,8 @@ router.put('/:id/batch', async (req: Request, res: Response) => {
       await client.query('DELETE FROM scheme_channel_applications WHERE scheme_id = $1', [id]);
 
       // 批量插入適用通路（使用 UNNEST 優化）
-      if (Array.isArray(applications) && applications.length > 0) {
-        const validApps = applications.filter((app: any) => app.channelId);
+      if (applications && Array.isArray(applications) && applications.length > 0) {
+        const validApps = applications.filter((app: any) => app && app.channelId);
         if (validApps.length > 0) {
           // 使用 UNNEST 進行批量插入
           const channelIds = validApps.map((app: any) => app.channelId);
@@ -316,8 +316,8 @@ router.put('/:id/batch', async (req: Request, res: Response) => {
       await client.query('DELETE FROM scheme_channel_exclusions WHERE scheme_id = $1', [id]);
 
       // 批量插入排除通路（優化：使用 UNNEST）
-      if (Array.isArray(exclusions) && exclusions.length > 0) {
-        const validExclusions = exclusions.filter((channelId: string) => channelId);
+      if (exclusions && Array.isArray(exclusions) && exclusions.length > 0) {
+        const validExclusions = exclusions.filter((channelId: any) => channelId && typeof channelId === 'string');
         if (validExclusions.length > 0) {
           await client.query(
             `INSERT INTO scheme_channel_exclusions (scheme_id, channel_id)
@@ -335,11 +335,13 @@ router.put('/:id/batch', async (req: Request, res: Response) => {
       res.json({ success: true, message: '方案已更新' });
     } catch (error) {
       await client.query('ROLLBACK');
+      console.error('批量更新方案錯誤:', error);
       throw error;
     } finally {
       client.release();
     }
   } catch (error) {
+    console.error('批量更新方案錯誤:', error);
     res.status(500).json({ success: false, error: (error as Error).message });
   }
 });
