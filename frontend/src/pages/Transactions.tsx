@@ -50,13 +50,23 @@ export default function Transactions() {
   }, []);
 
   const loadTransactions = async () => {
-    const res = await api.get('/transactions');
-    setTransactions(res.data.data);
+    try {
+      const res = await api.get('/transactions');
+      setTransactions(res.data.data);
+    } catch (error) {
+      console.error('載入交易記錄錯誤:', error);
+      alert('載入交易記錄失敗');
+    }
   };
 
   const loadTransactionTypes = async () => {
-    const res = await api.get('/settings/transaction-types');
-    setTransactionTypes(res.data.data);
+    try {
+      const res = await api.get('/settings/transaction-types');
+      setTransactionTypes(res.data.data);
+    } catch (error) {
+      console.error('載入交易類型錯誤:', error);
+      alert('載入交易類型失敗');
+    }
   };
 
   const loadSchemes = async () => {
@@ -79,9 +89,13 @@ export default function Transactions() {
   };
 
   const loadReasonString = async () => {
-    const res = await api.get('/settings/reason-strings');
-    if (res.data.data.length > 0) {
-      setReasonString(res.data.data[0].content);
+    try {
+      const res = await api.get('/settings/reason-strings');
+      if (res.data.data.length > 0) {
+        setReasonString(res.data.data[0].content);
+      }
+    } catch (error) {
+      console.error('載入原因字串錯誤:', error);
     }
   };
 

@@ -2,7 +2,9 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { pool } from './config/database';
+import { env } from './config/env';
 import { errorHandler } from './middleware/errorHandler';
+import { apiLimiter } from './middleware/rateLimiter';
 import { startQuotaRefreshScheduler } from './services/quotaRefreshScheduler';
 
 // 路由
@@ -20,12 +22,12 @@ import importDataRouter from './routes/importData';
 dotenv.config();
 
 const app = express();
-const PORT = parseInt(process.env.PORT || '3001', 10);
 
 // 中間件
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use('/api/', apiLimiter);
 
 // 根路徑
 app.get('/', (req, res) => {
@@ -74,9 +76,8 @@ app.use(errorHandler);
 
 // 啟動伺服器
 // Railway 和其他雲端平台需要監聽 0.0.0.0 而不是 localhost
-const HOST = process.env.HOST || '0.0.0.0';
-const server = app.listen(PORT, HOST, () => {
-  console.log(`🚀 後端服務運行於 http://${HOST}:${PORT}`);
+const server = app.listen(env.PORT, env.HOST, () => {
+  console.log(`🚀 後端服務運行於 http://${env.HOST}:${env.PORT}`);
   
   // 啟動額度刷新定時任務
   startQuotaRefreshScheduler();
@@ -85,7 +86,7 @@ const server = app.listen(PORT, HOST, () => {
 // 處理端口佔用錯誤
 server.on('error', (error: NodeJS.ErrnoException) => {
   if (error.code === 'EADDRINUSE') {
-    console.error(`❌ 端口 ${PORT} 已被佔用，請關閉佔用該端口的進程或更改 PORT 環境變數`);
+    console.error(`❌ 端口 ${env.PORT} 已被佔用，請關閉佔用該端口的進程或更改 PORT 環境變數`);
     console.error(`💡 提示：可以使用以下命令查看佔用端口的進程：`);
     console.error(`   netstat -ano | findstr :${PORT}`);
     console.error(`   然後使用 taskkill /F /PID <進程ID> 關閉進程`);

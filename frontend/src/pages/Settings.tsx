@@ -138,9 +138,9 @@ function SchemeDetailManager({
           <div className="text-xs text-gray-500 mt-1">
             {scheme.requires_switch ? '需切換' : '免切換'}
           </div>
-          {(scheme as any).shared_reward_group_id && (
+          {(scheme as Scheme & { shared_reward_group_id?: string; shared_reward_group_name?: string }).shared_reward_group_id && (
             <div className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded mt-1 inline-block">
-              🔗 共用回饋：{(scheme as any).shared_reward_group_name || '載入中...'}
+              🔗 共用回饋：{(scheme as Scheme & { shared_reward_group_id?: string; shared_reward_group_name?: string }).shared_reward_group_name || '載入中...'}
             </div>
           )}
         </div>
@@ -394,7 +394,7 @@ function CardItem({
       activityStartDate: scheme.activity_start_date ? scheme.activity_start_date.split('T')[0] : '',
       activityEndDate: scheme.activity_end_date ? scheme.activity_end_date.split('T')[0] : '',
       displayOrder: scheme.display_order ?? 0,
-      sharedRewardGroupId: (scheme as any).shared_reward_group_id || '',
+      sharedRewardGroupId: (scheme as Scheme & { shared_reward_group_id?: string }).shared_reward_group_id || '',
     });
     // 載入方案的詳細資訊（適用通路、排除通路）
     try {
@@ -752,14 +752,14 @@ function CardItem({
                   />
                   <label htmlFor="requiresSwitch" className="text-xs text-gray-600">需切換</label>
                 </div>
-                          <div className="flex gap-2">
-                            <button
-                              type="submit"
-                              disabled={isSaving}
-                              className="px-3 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              {isSaving ? '儲存中...' : (editingScheme ? '更新' : '新增')}
-                            </button>
+                <div className="flex gap-2">
+                  <button
+                    type="submit"
+                    disabled={isSaving}
+                    className="px-3 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isSaving ? '儲存中...' : (editingScheme ? '更新' : '新增')}
+                  </button>
                   <button
                     type="button"
                     onClick={() => {
@@ -1247,7 +1247,7 @@ function PaymentMethodItem({
     try {
       const res = await api.get(`/payment-methods/${paymentMethod.id}/rewards`);
       setRewards(
-        res.data.data.map((r: any) => ({
+        res.data.data.map((r: { id: string; reward_percentage: string | number; calculation_method: string; quota_limit: number | null; quota_refresh_type: string | null; quota_refresh_value: number | null; quota_refresh_date: string | null; display_order: number }) => ({
           id: r.id,
           percentage: parseFloat(r.reward_percentage) || 0,
           calculationMethod: r.calculation_method || 'round',
@@ -3889,7 +3889,14 @@ function QuotaSettings() {
       const res = await api.get('/quota');
       if (res.data && res.data.success && Array.isArray(res.data.data)) {
         // 處理支付方式：如果 rewardIds 都是空值，但 rewardComposition 有值，則創建對應的 rewardIds
-        const processedData = res.data.data.map((quota: any) => {
+        interface QuotaData {
+          schemeId?: string | null;
+          paymentMethodId?: string | null;
+          rewardIds?: string[];
+          rewardComposition?: string;
+          [key: string]: unknown;
+        }
+        const processedData = res.data.data.map((quota: QuotaData) => {
           // 如果是支付方式且 rewardIds 為空或都是空值，但 rewardComposition 有值
           if (!quota.schemeId && quota.paymentMethodId) {
             if ((!quota.rewardIds || quota.rewardIds.length === 0 || quota.rewardIds.every((id: string) => !id || id.trim() === '')) 
