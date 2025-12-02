@@ -48,17 +48,23 @@ router.get('/overview', async (req: Request, res: Response, next: NextFunction) 
 // 新增支付方式
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const { name, note, displayOrder } = req.body;
+    const { name, note } = req.body;
 
     if (!name) {
       return res.status(400).json({ success: false, error: '支付方式名稱必填' });
     }
 
+    // 取得最大 display_order，新增在最下方
+    const maxOrderResult = await pool.query(
+      'SELECT COALESCE(MAX(display_order), 0) as max_order FROM payment_methods'
+    );
+    const maxOrder = maxOrderResult.rows[0]?.max_order || 0;
+
     const result = await pool.query(
       `INSERT INTO payment_methods (name, note, own_reward_percentage, display_order)
        VALUES ($1, $2, $3, $4)
        RETURNING id, name, note, own_reward_percentage, display_order`,
-      [name, note || null, 0, displayOrder || 0] // 不再使用本身回饋，統一使用回饋組成
+      [name, note || null, 0, maxOrder + 1] // 不再使用本身回饋，統一使用回饋組成
     );
 
     res.json({ success: true, data: result.rows[0] });

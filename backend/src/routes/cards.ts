@@ -40,16 +40,22 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
  * 優化：添加驗證、使用統一回應格式
  */
 router.post('/', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const validated = createCardSchema.parse(req.body);
-    const { name, note, displayOrder } = validated;
+      try {
+        const validated = createCardSchema.parse(req.body);
+        const { name, note } = validated;
 
-    const result = await pool.query(
-      `INSERT INTO cards (name, note, display_order)
-       VALUES ($1, $2, $3)
-       RETURNING id, name, note, display_order`,
-      [name, note || null, displayOrder || 0]
-    );
+        // 取得最大 display_order，新增在最下方
+        const maxOrderResult = await pool.query(
+          'SELECT COALESCE(MAX(display_order), 0) as max_order FROM cards'
+        );
+        const maxOrder = maxOrderResult.rows[0]?.max_order || 0;
+
+        const result = await pool.query(
+          `INSERT INTO cards (name, note, display_order)
+           VALUES ($1, $2, $3)
+           RETURNING id, name, note, display_order`,
+          [name, note || null, maxOrder + 1]
+        );
 
     res.json(successResponse(result.rows[0], '卡片已建立'));
   } catch (error) {

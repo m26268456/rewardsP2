@@ -163,17 +163,23 @@ router.get('/search', async (req: Request, res: Response) => {
 // 新增通路
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const { name, isCommon, displayOrder } = req.body;
+    const { name, isCommon } = req.body;
 
     if (!name) {
       return res.status(400).json({ success: false, error: '通路名稱必填' });
     }
 
+    // 取得最大 display_order，新增在最下方
+    const maxOrderResult = await pool.query(
+      'SELECT COALESCE(MAX(display_order), 0) as max_order FROM channels'
+    );
+    const maxOrder = maxOrderResult.rows[0]?.max_order || 0;
+
     const result = await pool.query(
       `INSERT INTO channels (name, is_common, display_order)
        VALUES ($1, $2, $3)
        RETURNING id, name, is_common, display_order`,
-      [name, isCommon || false, displayOrder || 0]
+      [name, isCommon || false, maxOrder + 1]
     );
 
     res.json({ success: true, data: result.rows[0] });

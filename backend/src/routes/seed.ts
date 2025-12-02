@@ -498,4 +498,94 @@ router.post('/import', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * 執行共用額度遷移
+ * 此端點會執行資料庫遷移，添加共用額度支援
+ */
+/**
+ * 執行共用額度遷移
+ * 此端點會執行資料庫遷移，添加共用額度支援
+ */
+router.get('/migrate-shared-quota', async (req: Request, res: Response) => {
+  let client;
+  try {
+    client = await pool.connect();
+    
+    // 讀取遷移腳本
+    const fs = require('fs');
+    const path = require('path');
+    const migrationPath = path.join(__dirname, '../../database/migrations/add_shared_quota_support.sql');
+    
+    if (!fs.existsSync(migrationPath)) {
+      return res.status(404).json({ 
+        success: false, 
+        error: '遷移腳本不存在' 
+      });
+    }
+    
+    const migrationSQL = fs.readFileSync(migrationPath, 'utf8');
+    
+    // 執行遷移腳本
+    await client.query(migrationSQL);
+    
+    res.json({ 
+      success: true, 
+      message: '共用額度遷移已完成' 
+    });
+  } catch (error: any) {
+    console.error('遷移錯誤:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message || '遷移失敗' 
+    });
+  } finally {
+    if (client) {
+      client.release();
+    }
+  }
+});
+
+/**
+ * 執行索引優化
+ * 添加複合索引和部分索引以提升查詢效能
+ */
+router.get('/optimize-indexes', async (req: Request, res: Response) => {
+  let client;
+  try {
+    client = await pool.connect();
+    
+    // 讀取優化腳本
+    const fs = require('fs');
+    const path = require('path');
+    const optimizationPath = path.join(__dirname, '../../database/migrations/optimize_indexes.sql');
+    
+    if (!fs.existsSync(optimizationPath)) {
+      return res.status(404).json({ 
+        success: false, 
+        error: '優化腳本不存在' 
+      });
+    }
+    
+    const optimizationSQL = fs.readFileSync(optimizationPath, 'utf8');
+    
+    // 執行優化腳本
+    await client.query(optimizationSQL);
+    
+    res.json({ 
+      success: true, 
+      message: '索引優化已完成' 
+    });
+  } catch (error: any) {
+    console.error('優化錯誤:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message || '優化失敗' 
+    });
+  } finally {
+    if (client) {
+      client.release();
+    }
+  }
+});
+
 export default router;

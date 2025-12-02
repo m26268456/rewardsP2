@@ -242,7 +242,7 @@ export default function QuotaQuery() {
     return (
       <div className="space-y-6">
         <h2 className="text-3xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">
-          額度查詢
+          額度管理
         </h2>
         <div className="flex items-center justify-center py-12">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600"></div>
@@ -255,7 +255,7 @@ export default function QuotaQuery() {
   return (
     <div className="space-y-6">
       <h2 className="text-3xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">
-        額度查詢
+        額度管理
       </h2>
 
       {!hasAnyQuota && (

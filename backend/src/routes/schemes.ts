@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { pool } from '../config/database';
-import { getAllCardsWithSchemes, queryChannelRewards, queryChannelRewardsByKeywords } from '../services/schemeService';
+import { getAllCardsWithSchemes, queryChannelRewards } from '../services/schemeService';
+import { queryChannelRewardsByKeywords } from '../services/ChannelSearchService';
 
 const router = Router();
 
@@ -90,6 +91,13 @@ router.post('/', async (req: Request, res: Response) => {
     try {
       await client.query('BEGIN');
 
+      // 取得該卡片的最大 display_order，新增在最下方
+      const maxOrderResult = await client.query(
+        'SELECT COALESCE(MAX(display_order), 0) as max_order FROM card_schemes WHERE card_id = $1',
+        [cardId]
+      );
+      const maxOrder = maxOrderResult.rows[0]?.max_order || 0;
+
       // 新增方案
       const schemeResult = await client.query(
         `INSERT INTO card_schemes (card_id, name, note, requires_switch, activity_start_date, activity_end_date, display_order)
@@ -102,7 +110,7 @@ router.post('/', async (req: Request, res: Response) => {
           requiresSwitch || false,
           activityStartDate || null,
           activityEndDate || null,
-          displayOrder || 0,
+          maxOrder + 1,
         ]
       );
 

@@ -331,7 +331,7 @@ export default function Transactions() {
                       ? formatTz(utcToZonedTime(new Date(transaction.transaction_date), TIMEZONE), 'yyyy/MM/dd', { timeZone: TIMEZONE })
                       : '-'}
                   </td>
-                  <td className="px-4 py-3 text-sm whitespace-pre-wrap">{transaction.reason}</td>
+                  <td className="px-4 py-3 text-sm">{transaction.reason}</td>
                   <td className="px-4 py-3 text-sm">
                     {transaction.amount ? transaction.amount.toLocaleString() : '-'}
                   </td>

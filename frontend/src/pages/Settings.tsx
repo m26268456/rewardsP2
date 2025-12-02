@@ -3,6 +3,8 @@ import api from '../utils/api';
 import { isApp, setAppMode } from '../utils/isApp';
 import type { Card, Scheme, PaymentMethod, TransactionType, CalculationScheme, Channel } from '../types';
 
+const appMode = isApp();
+
 // 輔助函數：將文字中的網址轉換為可點擊的連結
 function linkify(text: string): string {
   if (!text) return '';
@@ -49,7 +51,7 @@ export default function Settings() {
               { id: 'query', label: '回饋查詢' },
               { id: 'calculate', label: '回饋計算' },
               { id: 'transactions', label: '記帳功能' },
-              { id: 'quota', label: '額度查詢' },
+              { id: 'quota', label: '額度管理' },
               { id: 'app', label: '應用程式設定' },
             ].map((tab) => (
               <button
@@ -126,9 +128,32 @@ function SchemeDetailManager({
 
   return (
     <div className="p-2 bg-white rounded text-sm border">
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-2">
+      <div className={`flex ${appMode ? 'flex-col' : 'flex-col sm:flex-row sm:items-start sm:justify-between'} gap-2 mb-2`}>
         <div className="flex-1 min-w-0 w-full sm:w-auto">
           <div className="font-medium">{scheme.name}</div>
+          {/* App模式下，按鈕在名稱下方 */}
+          {appMode && (
+            <div className="flex gap-1 flex-shrink-0 flex-wrap mt-1">
+              <button
+                onClick={onExpand}
+                className="px-2 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 whitespace-nowrap"
+              >
+                {isExpanded ? '收起' : '展開'}
+              </button>
+              <button
+                onClick={onEdit}
+                className="px-2 py-1 bg-yellow-500 text-white rounded text-xs hover:bg-yellow-600"
+              >
+                編輯
+              </button>
+              <button
+                onClick={onDelete}
+                className="px-2 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600"
+              >
+                刪除
+              </button>
+            </div>
+          )}
           {scheme.note && (
             <div 
               className="text-xs text-gray-600 break-words mt-1 overflow-wrap-anywhere" 
@@ -139,26 +164,29 @@ function SchemeDetailManager({
             {scheme.requires_switch ? '需切換' : '免切換'}
           </div>
         </div>
-        <div className="flex gap-1 flex-shrink-0 flex-wrap">
-          <button
-            onClick={onExpand}
-            className="px-2 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 whitespace-nowrap"
-          >
-            {isExpanded ? '收起' : '展開'}
-          </button>
-          <button
-            onClick={onEdit}
-            className="px-2 py-1 bg-yellow-500 text-white rounded text-xs hover:bg-yellow-600"
-          >
-            編輯
-          </button>
-          <button
-            onClick={onDelete}
-            className="px-2 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600"
-          >
-            刪除
-          </button>
-        </div>
+        {/* 非App模式下，按鈕在右側 */}
+        {!appMode && (
+          <div className="flex gap-1 flex-shrink-0 flex-wrap">
+            <button
+              onClick={onExpand}
+              className="px-2 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 whitespace-nowrap"
+            >
+              {isExpanded ? '收起' : '展開'}
+            </button>
+            <button
+              onClick={onEdit}
+              className="px-2 py-1 bg-yellow-500 text-white rounded text-xs hover:bg-yellow-600"
+            >
+              編輯
+            </button>
+            <button
+              onClick={onDelete}
+              className="px-2 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600"
+            >
+              刪除
+            </button>
+          </div>
+        )}
       </div>
 
       {isExpanded && schemeDetails && (
@@ -611,9 +639,37 @@ function CardItem({
 
   return (
     <div className="p-3 bg-gray-50 rounded border">
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-2">
+      <div className={`flex ${appMode ? 'flex-col' : 'flex-col sm:flex-row sm:items-start sm:justify-between'} gap-2 mb-2`}>
         <div className="flex-1 min-w-0 w-full sm:w-auto">
           <div className="font-medium">{card.name}</div>
+          {/* App模式下，按鈕在名稱下方 */}
+          {appMode && (
+            <div className="flex gap-2 flex-shrink-0 flex-wrap mt-1">
+              <button
+                onClick={() => {
+                  setShowSchemes(!showSchemes);
+                  if (!showSchemes) {
+                    loadSchemes();
+                  }
+                }}
+                className="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600 whitespace-nowrap"
+              >
+                {showSchemes ? '隱藏方案' : '管理方案'}
+              </button>
+              <button
+                onClick={onEdit}
+                className="px-3 py-1 bg-yellow-500 text-white rounded text-sm hover:bg-yellow-600 whitespace-nowrap"
+              >
+                編輯
+              </button>
+              <button
+                onClick={onDelete}
+                className="px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600 whitespace-nowrap"
+              >
+                刪除
+              </button>
+            </div>
+          )}
           {card.note && (
             <div 
               className="text-sm text-gray-600 break-words mt-1 overflow-wrap-anywhere" 
@@ -621,31 +677,34 @@ function CardItem({
             />
           )}
         </div>
-        <div className="flex gap-2 flex-shrink-0 flex-wrap">
-          <button
-            onClick={() => {
-              setShowSchemes(!showSchemes);
-              if (!showSchemes) {
-                loadSchemes();
-              }
-            }}
-            className="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600 whitespace-nowrap"
-          >
-            {showSchemes ? '隱藏方案' : '管理方案'}
-          </button>
-          <button
-            onClick={onEdit}
-            className="px-3 py-1 bg-yellow-500 text-white rounded text-sm hover:bg-yellow-600 whitespace-nowrap"
-          >
-            編輯
-          </button>
-          <button
-            onClick={onDelete}
-            className="px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600 whitespace-nowrap"
-          >
-            刪除
-          </button>
-        </div>
+        {/* 非App模式下，按鈕在右側 */}
+        {!appMode && (
+          <div className="flex gap-2 flex-shrink-0 flex-wrap">
+            <button
+              onClick={() => {
+                setShowSchemes(!showSchemes);
+                if (!showSchemes) {
+                  loadSchemes();
+                }
+              }}
+              className="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600 whitespace-nowrap"
+            >
+              {showSchemes ? '隱藏方案' : '管理方案'}
+            </button>
+            <button
+              onClick={onEdit}
+              className="px-3 py-1 bg-yellow-500 text-white rounded text-sm hover:bg-yellow-600 whitespace-nowrap"
+            >
+              編輯
+            </button>
+            <button
+              onClick={onDelete}
+              className="px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600 whitespace-nowrap"
+            >
+              刪除
+            </button>
+          </div>
+        )}
       </div>
 
       {/* 方案列表 */}
@@ -1598,9 +1657,26 @@ function PaymentMethodItem({
 
   return (
     <div className="p-3 bg-gray-50 rounded border">
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-2">
+      <div className={`flex ${appMode ? 'flex-col' : 'flex-col sm:flex-row sm:items-start sm:justify-between'} gap-2 mb-2`}>
         <div className="flex-1 min-w-0 w-full sm:w-auto">
           <div className="font-medium">{paymentMethod.name}</div>
+          {/* App模式下，按鈕在名稱下方 */}
+          {appMode && (
+            <div className="flex gap-2 flex-shrink-0 flex-wrap mt-1">
+              <button
+                onClick={onEdit}
+                className="px-3 py-1 bg-yellow-500 text-white rounded text-sm hover:bg-yellow-600 whitespace-nowrap"
+              >
+                編輯
+              </button>
+              <button
+                onClick={onDelete}
+                className="px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600 whitespace-nowrap"
+              >
+                刪除
+              </button>
+            </div>
+          )}
           {paymentMethod.note && (
             <div 
               className="text-sm text-gray-600 break-words mt-1 overflow-wrap-anywhere" 
@@ -1608,20 +1684,23 @@ function PaymentMethodItem({
             />
           )}
         </div>
-        <div className="flex gap-2 flex-shrink-0 flex-wrap">
-          <button
-            onClick={onEdit}
-            className="px-3 py-1 bg-yellow-500 text-white rounded text-sm hover:bg-yellow-600 whitespace-nowrap"
-          >
-            編輯
-          </button>
-          <button
-            onClick={onDelete}
-            className="px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600 whitespace-nowrap"
-          >
-            刪除
-          </button>
-        </div>
+        {/* 非App模式下，按鈕在右側 */}
+        {!appMode && (
+          <div className="flex gap-2 flex-shrink-0 flex-wrap">
+            <button
+              onClick={onEdit}
+              className="px-3 py-1 bg-yellow-500 text-white rounded text-sm hover:bg-yellow-600 whitespace-nowrap"
+            >
+              編輯
+            </button>
+            <button
+              onClick={onDelete}
+              className="px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600 whitespace-nowrap"
+            >
+              刪除
+            </button>
+          </div>
+        )}
       </div>
 
       {/* 通路管理 */}
@@ -3299,6 +3378,9 @@ function TransactionSettings() {
   const [isReorderingSchemes, setIsReorderingSchemes] = useState(false);
   const [reorderedSchemes, setReorderedSchemes] = useState<CalculationScheme[]>([]);
   const [showForm, setShowForm] = useState(false);
+  // 展開/縮合狀態
+  const [expandedTypes, setExpandedTypes] = useState(true);
+  const [expandedSchemes, setExpandedSchemes] = useState(true);
   const [formData, setFormData] = useState({
     selectedType: '',
     selectedCardId: '',
@@ -3621,7 +3703,15 @@ function TransactionSettings() {
         {/* 交易類型 */}
         <div>
           <div className="flex justify-between items-center mb-2">
-            <h4 className="font-medium">交易類型</h4>
+            <div className="flex items-center gap-2">
+              <h4 className="font-medium">交易類型</h4>
+              <button
+                onClick={() => setExpandedTypes(!expandedTypes)}
+                className="px-2 py-1 bg-gray-400 text-white rounded text-xs hover:bg-gray-500"
+              >
+                {expandedTypes ? '▼ 收起' : '▶ 展開'}
+              </button>
+            </div>
             <div className="flex gap-2">
               <button
                 onClick={handleTypeOrderUpdate}
@@ -3696,7 +3786,8 @@ function TransactionSettings() {
             </div>
           )}
 
-          <div className="space-y-2">
+          {expandedTypes && (
+            <div className="space-y-2">
             {(isReorderingTypes ? reorderedTypes : transactionTypes).map((type, index) => (
               <div key={type.id} className="flex items-center gap-2">
                 <div className="flex-1 flex items-center justify-between p-3 bg-gray-50 rounded border">
@@ -3759,13 +3850,22 @@ function TransactionSettings() {
                 )}
               </div>
             ))}
-          </div>
+            </div>
+          )}
         </div>
 
         {/* 可用方案 */}
         <div>
           <div className="flex justify-between items-center mb-2">
-            <h4 className="font-medium">可用方案</h4>
+            <div className="flex items-center gap-2">
+              <h4 className="font-medium">可用方案</h4>
+              <button
+                onClick={() => setExpandedSchemes(!expandedSchemes)}
+                className="px-2 py-1 bg-gray-400 text-white rounded text-xs hover:bg-gray-500"
+              >
+                {expandedSchemes ? '▼ 收起' : '▶ 展開'}
+              </button>
+            </div>
             <div className="flex gap-2">
               <button
                 onClick={handleSchemeOrderUpdate}
@@ -3934,8 +4034,9 @@ function TransactionSettings() {
               </div>
             </div>
           )}
-          <div className="space-y-2">
-            {(isReorderingSchemes ? reorderedSchemes : schemes).map((scheme, index) => (
+          {expandedSchemes && (
+            <div className="space-y-2">
+              {(isReorderingSchemes ? reorderedSchemes : schemes).map((scheme, index) => (
               <div key={scheme.id} className="flex items-center gap-2">
                 <div className="flex-1 flex items-center justify-between p-3 bg-gray-50 rounded border">
                   <div>
@@ -3985,8 +4086,9 @@ function TransactionSettings() {
                   </div>
                 )}
               </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* 清除交易明細 */}
