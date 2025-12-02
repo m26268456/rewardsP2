@@ -259,6 +259,9 @@ router.get('/', async (req: Request, res: Response) => {
         remainingQuota: number | null;
         referenceAmount: number | null;
         refreshTime: string;
+        quotaRefreshType: string | null;
+        quotaRefreshValue: number | null;
+        quotaRefreshDate: string | null;
       }>;
     }>();
 
@@ -315,6 +318,9 @@ router.get('/', async (req: Request, res: Response) => {
         remainingQuota,
         referenceAmount,
         refreshTime,
+        quotaRefreshType: row.quota_refresh_type || null,
+        quotaRefreshValue: row.quota_refresh_value || null,
+        quotaRefreshDate: row.quota_refresh_date ? row.quota_refresh_date.toISOString().split('T')[0] : null,
       });
     });
 
@@ -331,6 +337,9 @@ router.get('/', async (req: Request, res: Response) => {
         remainingQuota: number | null;
         referenceAmount: number | null;
         refreshTime: string;
+        quotaRefreshType: string | null;
+        quotaRefreshValue: number | null;
+        quotaRefreshDate: string | null;
       }>;
     }>();
 
@@ -379,6 +388,9 @@ router.get('/', async (req: Request, res: Response) => {
         remainingQuota,
         referenceAmount,
         refreshTime,
+        quotaRefreshType: row.quota_refresh_type || null,
+        quotaRefreshValue: row.quota_refresh_value || null,
+        quotaRefreshDate: row.quota_refresh_date ? row.quota_refresh_date.toISOString().split('T')[0] : null,
       });
     });
 
@@ -404,6 +416,9 @@ router.get('/', async (req: Request, res: Response) => {
         referenceAmounts: quota.rewards.map(r => r.referenceAmount),
         refreshTimes: quota.rewards.map(r => r.refreshTime),
         rewardIds: quota.rewards.map(r => r.rewardId),
+        quotaRefreshTypes: quota.rewards.map(r => r.quotaRefreshType),
+        quotaRefreshValues: quota.rewards.map(r => r.quotaRefreshValue),
+        quotaRefreshDates: quota.rewards.map(r => r.quotaRefreshDate),
       };
     });
 
@@ -424,6 +439,9 @@ router.get('/', async (req: Request, res: Response) => {
         referenceAmounts: quota.rewards.map(r => r.referenceAmount),
         refreshTimes: quota.rewards.map(r => r.refreshTime),
         rewardIds: quota.rewards.map(r => r.rewardId),
+        quotaRefreshTypes: quota.rewards.map(r => r.quotaRefreshType),
+        quotaRefreshValues: quota.rewards.map(r => r.quotaRefreshValue),
+        quotaRefreshDates: quota.rewards.map(r => r.quotaRefreshDate),
       });
     });
 

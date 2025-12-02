@@ -554,6 +554,55 @@ router.put('/:id/rewards', async (req: Request, res: Response) => {
   }
 });
 
+// 更新單個回饋組成
+router.put('/:id/rewards/:rewardId', async (req: Request, res: Response) => {
+  try {
+    const { id, rewardId } = req.params;
+    const { rewardPercentage, calculationMethod, quotaLimit, quotaRefreshType, quotaRefreshValue, quotaRefreshDate } = req.body;
+
+    // 檢查方案是否存在，並取得實際的方案ID（如果設定了 shared_reward_group_id，則更新該方案的回饋組成）
+    const schemeResult = await pool.query(
+      `SELECT id, shared_reward_group_id FROM card_schemes WHERE id = $1`,
+      [id]
+    );
+
+    if (schemeResult.rows.length === 0) {
+      return res.status(404).json({ success: false, error: '方案不存在' });
+    }
+
+    const scheme = schemeResult.rows[0];
+    const targetSchemeId = scheme.shared_reward_group_id || id;
+
+    // 更新回饋組成
+    const result = await pool.query(
+      `UPDATE scheme_rewards
+       SET reward_percentage = $1, calculation_method = $2, quota_limit = $3,
+           quota_refresh_type = $4, quota_refresh_value = $5, quota_refresh_date = $6,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $7 AND scheme_id = $8
+       RETURNING id`,
+      [
+        rewardPercentage,
+        calculationMethod || 'round',
+        quotaLimit || null,
+        quotaRefreshType || null,
+        quotaRefreshValue || null,
+        quotaRefreshDate || null,
+        rewardId,
+        targetSchemeId,
+      ]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, error: '回饋組成不存在' });
+    }
+
+    res.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    res.status(500).json({ success: false, error: (error as Error).message });
+  }
+});
+
 // 更新卡片方案的順序
 router.put('/card/:cardId/order', async (req: Request, res: Response) => {
   try {
