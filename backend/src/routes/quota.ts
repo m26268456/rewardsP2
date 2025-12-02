@@ -31,11 +31,12 @@ router.get('/', async (req: Request, res: Response) => {
          qt.current_amount,
          qt.next_refresh_at
        FROM card_schemes cs
-       JOIN cards c ON cs.card_id = c.id
-       JOIN scheme_rewards sr ON cs.id = sr.scheme_id
+       INNER JOIN cards c ON cs.card_id = c.id
+       INNER JOIN scheme_rewards sr ON cs.id = sr.scheme_id
        LEFT JOIN quota_trackings qt ON cs.id = qt.scheme_id 
          AND sr.id = qt.reward_id 
          AND qt.payment_method_id IS NULL
+       WHERE cs.card_id IS NOT NULL
        ORDER BY c.display_order, cs.display_order, sr.display_order`
     );
 
@@ -167,11 +168,12 @@ router.get('/', async (req: Request, res: Response) => {
          qt.current_amount,
          qt.next_refresh_at
        FROM card_schemes cs
-       JOIN cards c ON cs.card_id = c.id
-       JOIN scheme_rewards sr ON cs.id = sr.scheme_id
+       INNER JOIN cards c ON cs.card_id = c.id
+       INNER JOIN scheme_rewards sr ON cs.id = sr.scheme_id
        LEFT JOIN quota_trackings qt ON cs.id = qt.scheme_id 
          AND sr.id = qt.reward_id 
          AND qt.payment_method_id IS NULL
+       WHERE cs.card_id IS NOT NULL
        ORDER BY c.display_order, cs.display_order, sr.display_order`
     );
 
@@ -249,9 +251,14 @@ router.get('/', async (req: Request, res: Response) => {
       // 如果 quotaLimit 為 null，remainingQuota 保持為 null（無上限）
 
       if (!quotaMap.has(key)) {
+        // 確保卡片方案必須有 card_id（不應該為 null）
+        const cardId = row.card_id || null;
+        if (row.scheme_id && !cardId) {
+          console.warn('警告：卡片方案缺少 card_id', { scheme_id: row.scheme_id, row });
+        }
         quotaMap.set(key, {
           name: row.name,
-          cardId: row.card_id || null,
+          cardId: cardId,
           paymentMethodId: row.payment_method_id_for_group || null,
           cardName: row.card_name || null,
           paymentMethodName: row.payment_method_name || null,

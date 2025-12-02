@@ -79,8 +79,13 @@ export default function QuotaQuery() {
   const cardGroups = new Map<string, QuotaInfo[]>();
   cardQuotas.forEach(quota => {
     // 如果沒有 cardId，跳過（不應該發生，但為了安全）
+    // 這可能是資料庫中的錯誤資料，記錄警告但不中斷執行
     if (!quota.cardId) {
-      console.warn('額度資料缺少 cardId:', quota);
+      console.warn('額度資料缺少 cardId（已跳過）:', {
+        schemeId: quota.schemeId,
+        name: quota.name,
+        quota
+      });
       return;
     }
     const cardId = quota.cardId;
