@@ -486,6 +486,40 @@ router.put('/:id/channels', async (req: Request, res: Response) => {
   }
 });
 
+// 新增方案的回饋組成
+router.post('/:id/rewards', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { rewardPercentage, calculationMethod, quotaLimit, quotaRefreshType, quotaRefreshValue, quotaRefreshDate, displayOrder } = req.body;
+
+    if (!rewardPercentage || parseFloat(rewardPercentage) <= 0) {
+      return res.status(400).json({ success: false, error: '回饋百分比必填且必須大於 0' });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO scheme_rewards 
+       (scheme_id, reward_percentage, calculation_method, quota_limit, 
+        quota_refresh_type, quota_refresh_value, quota_refresh_date, display_order)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING id`,
+      [
+        id,
+        rewardPercentage,
+        calculationMethod || 'round',
+        quotaLimit || null,
+        quotaRefreshType || null,
+        quotaRefreshValue || null,
+        quotaRefreshDate || null,
+        displayOrder || 0,
+      ]
+    );
+
+    res.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    res.status(500).json({ success: false, error: (error as Error).message });
+  }
+});
+
 // 更新方案的回饋組成
 router.put('/:id/rewards', async (req: Request, res: Response) => {
   try {

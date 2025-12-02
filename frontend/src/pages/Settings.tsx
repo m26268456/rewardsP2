@@ -4169,6 +4169,64 @@ function QuotaSettings() {
     }
   };
 
+  const handleAddReward = (quotaIndex: number, groupKey: string) => {
+    setAddingReward({ quotaIndex, groupKey });
+    setRewardAddForm({
+      rewardPercentage: '',
+      calculationMethod: 'round',
+      quotaLimit: '',
+      quotaRefreshType: '',
+      quotaRefreshValue: '',
+      quotaRefreshDate: '',
+    });
+  };
+
+  const handleSaveNewReward = async () => {
+    if (!addingReward) return;
+    const quota = quotas[addingReward.quotaIndex];
+    if (!quota) return;
+
+    if (!rewardAddForm.rewardPercentage || parseFloat(rewardAddForm.rewardPercentage) <= 0) {
+      alert('請輸入有效的回饋百分比');
+      return;
+    }
+
+    try {
+      // 如果是卡片方案，使用 POST /schemes/:id/rewards
+      // 如果是支付方式，使用 POST /payment-methods/:id/rewards
+      if (quota.schemeId) {
+        await api.post(`/schemes/${quota.schemeId}/rewards`, {
+          rewardPercentage: parseFloat(rewardAddForm.rewardPercentage),
+          calculationMethod: rewardAddForm.calculationMethod,
+          quotaLimit: rewardAddForm.quotaLimit ? parseFloat(rewardAddForm.quotaLimit) : null,
+          quotaRefreshType: rewardAddForm.quotaRefreshType || null,
+          quotaRefreshValue: rewardAddForm.quotaRefreshValue ? parseInt(rewardAddForm.quotaRefreshValue) : null,
+          quotaRefreshDate: rewardAddForm.quotaRefreshDate || null,
+          displayOrder: quota.rewardIds?.length || 0,
+        });
+      } else if (quota.paymentMethodId) {
+        await api.post(`/payment-methods/${quota.paymentMethodId}/rewards`, {
+          rewardPercentage: parseFloat(rewardAddForm.rewardPercentage),
+          calculationMethod: rewardAddForm.calculationMethod,
+          quotaLimit: rewardAddForm.quotaLimit ? parseFloat(rewardAddForm.quotaLimit) : null,
+          quotaRefreshType: rewardAddForm.quotaRefreshType || null,
+          quotaRefreshValue: rewardAddForm.quotaRefreshValue ? parseInt(rewardAddForm.quotaRefreshValue) : null,
+          quotaRefreshDate: rewardAddForm.quotaRefreshDate || null,
+          displayOrder: quota.rewardIds?.length || 0,
+        });
+      } else {
+        alert('無法新增：缺少必要資訊');
+        return;
+      }
+      alert('回饋組成已新增');
+      setAddingReward(null);
+      loadQuotas();
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { error?: string } } };
+      alert(err.response?.data?.error || '新增失敗');
+    }
+  };
+
   // 將額度分為兩類：信用卡、支付方式（移除信用卡綁定支付方式）
   const cardQuotas = quotas.filter(q => q.schemeId && !q.paymentMethodId);
   const paymentQuotas = quotas.filter(q => !q.schemeId && q.paymentMethodId);
@@ -4272,39 +4330,50 @@ function QuotaSettings() {
                 const bgColor = quotaIndex % 2 === 0 ? 'bg-white' : 'bg-blue-50';
                 const borderColor = quotaIndex % 2 === 0 ? 'border-gray-200' : 'border-blue-200';
                 
-                return validRewardIndices.map((originalIndex, displayIndex) => {
+                const isAdding = addingReward?.quotaIndex === quotaIndex && addingReward?.groupKey === groupKey;
+                const rows = isAdding ? [...validRewardIndices, -1] : validRewardIndices;
+                
+                return rows.map((originalIndex, displayIndex) => {
                   const isFirstRow = displayIndex === 0;
-                  const rewardPercentage = quota.rewardComposition?.split('/')[originalIndex]?.replace('%', '') || '';
-                  const calculationMethod = quota.calculationMethods?.[originalIndex] || 'round';
+                  const isNewRow = originalIndex === -1;
+                  const rewardPercentage = isNewRow ? '' : (quota.rewardComposition?.split('/')[originalIndex]?.replace('%', '') || '');
+                  const calculationMethod = isNewRow ? 'round' : (quota.calculationMethods?.[originalIndex] || 'round');
                   const calculationMethodText = 
                     calculationMethod === 'round' ? '四捨五入' :
                     calculationMethod === 'floor' ? '無條件捨去' :
                     calculationMethod === 'ceil' ? '無條件進位' : '四捨五入';
                   
-                  const usedQuota = quota.usedQuotas?.[originalIndex] || 0;
-                  const remainingQuota = quota.remainingQuotas?.[originalIndex] ?? null;
-                  const quotaLimit = quota.quotaLimits?.[originalIndex] ?? null;
-                  const currentAmount = quota.currentAmounts?.[originalIndex] || 0;
-                  const referenceAmount = quota.referenceAmounts?.[originalIndex] ?? null;
-                  const isEditing = editingQuota?.quotaIndex === quotaIndex && editingQuota?.rewardIndex === originalIndex && editingQuota?.groupKey === groupKey;
+                  const usedQuota = isNewRow ? 0 : (quota.usedQuotas?.[originalIndex] || 0);
+                  const remainingQuota = isNewRow ? null : (quota.remainingQuotas?.[originalIndex] ?? null);
+                  const quotaLimit = isNewRow ? null : (quota.quotaLimits?.[originalIndex] ?? null);
+                  const currentAmount = isNewRow ? 0 : (quota.currentAmounts?.[originalIndex] || 0);
+                  const referenceAmount = isNewRow ? null : (quota.referenceAmounts?.[originalIndex] ?? null);
+                  const isEditing = !isNewRow && editingQuota?.quotaIndex === quotaIndex && editingQuota?.rewardIndex === originalIndex && editingQuota?.groupKey === groupKey;
+                  const isEditingReward = !isNewRow && editingReward?.quotaIndex === quotaIndex && editingReward?.rewardIndex === originalIndex && editingReward?.groupKey === groupKey;
                   
                   return (
                     <tr key={`${quotaIndex}-${originalIndex}`} className={`${bgColor} ${borderColor} border-l-4 hover:bg-blue-100 transition-colors`}>
                       {isFirstRow && (
                         <td
                           className={`px-4 py-3 text-sm font-medium sticky left-0 ${bgColor} z-10 border-r border-gray-200`}
-                          rowSpan={rewardCount}
+                          rowSpan={isAdding ? rewardCount + 1 : rewardCount}
                         >
                           <div className="font-semibold text-gray-900">{quota.schemeName || quota.name}</div>
                         </td>
                       )}
                       <td className="px-4 py-3 text-sm">
-                        {editingReward?.quotaIndex === quotaIndex && editingReward?.rewardIndex === originalIndex && editingReward?.groupKey === groupKey ? (
+                        {(isEditingReward || isNewRow) ? (
                           <input
                             type="number"
                             step="0.01"
-                            value={rewardEditForm.rewardPercentage}
-                            onChange={(e) => setRewardEditForm({ ...rewardEditForm, rewardPercentage: e.target.value })}
+                            value={isNewRow ? rewardAddForm.rewardPercentage : rewardEditForm.rewardPercentage}
+                            onChange={(e) => {
+                              if (isNewRow) {
+                                setRewardAddForm({ ...rewardAddForm, rewardPercentage: e.target.value });
+                              } else {
+                                setRewardEditForm({ ...rewardEditForm, rewardPercentage: e.target.value });
+                              }
+                            }}
                             className="w-20 px-2 py-1 border rounded text-xs"
                             placeholder="0"
                           />
@@ -4315,10 +4384,16 @@ function QuotaSettings() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-600">
-                        {editingReward?.quotaIndex === quotaIndex && editingReward?.rewardIndex === originalIndex && editingReward?.groupKey === groupKey ? (
+                        {(isEditingReward || isNewRow) ? (
                           <select
-                            value={rewardEditForm.calculationMethod}
-                            onChange={(e) => setRewardEditForm({ ...rewardEditForm, calculationMethod: e.target.value })}
+                            value={isNewRow ? rewardAddForm.calculationMethod : rewardEditForm.calculationMethod}
+                            onChange={(e) => {
+                              if (isNewRow) {
+                                setRewardAddForm({ ...rewardAddForm, calculationMethod: e.target.value });
+                              } else {
+                                setRewardEditForm({ ...rewardEditForm, calculationMethod: e.target.value });
+                              }
+                            }}
                             className="w-full px-2 py-1 border rounded text-xs"
                           >
                             <option value="round">四捨五入</option>
@@ -4330,12 +4405,18 @@ function QuotaSettings() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-sm">
-                        {editingReward?.quotaIndex === quotaIndex && editingReward?.rewardIndex === originalIndex && editingReward?.groupKey === groupKey ? (
+                        {(isEditingReward || isNewRow) ? (
                           <input
                             type="number"
                             step="0.01"
-                            value={rewardEditForm.quotaLimit}
-                            onChange={(e) => setRewardEditForm({ ...rewardEditForm, quotaLimit: e.target.value })}
+                            value={isNewRow ? rewardAddForm.quotaLimit : rewardEditForm.quotaLimit}
+                            onChange={(e) => {
+                              if (isNewRow) {
+                                setRewardAddForm({ ...rewardAddForm, quotaLimit: e.target.value });
+                              } else {
+                                setRewardEditForm({ ...rewardEditForm, quotaLimit: e.target.value });
+                              }
+                            }}
                             className="w-24 px-2 py-1 border rounded text-xs"
                             placeholder="無上限"
                           />
@@ -4354,19 +4435,91 @@ function QuotaSettings() {
                         {formatConsumptionInfo(currentAmount, referenceAmount)}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-600">
-                        <div className="text-xs">
-                          {quota.refreshTimes?.[originalIndex] || '-'}
-                        </div>
+                        {(isEditingReward || isNewRow) ? (
+                          <div className="space-y-2">
+                            <div>
+                              <label className="text-xs font-medium block mb-1">刷新類型</label>
+                              <select
+                                value={isNewRow ? (rewardAddForm.quotaRefreshType || '') : (rewardEditForm.quotaRefreshType || '')}
+                                onChange={(e) => {
+                                  const newType = e.target.value || null;
+                                  if (isNewRow) {
+                                    setRewardAddForm({
+                                      ...rewardAddForm,
+                                      quotaRefreshType: newType || '',
+                                      quotaRefreshValue: newType === 'date' ? null : rewardAddForm.quotaRefreshValue,
+                                      quotaRefreshDate: newType !== 'date' ? null : rewardAddForm.quotaRefreshDate,
+                                    });
+                                  } else {
+                                    setRewardEditForm({
+                                      ...rewardEditForm,
+                                      quotaRefreshType: newType || '',
+                                      quotaRefreshValue: newType === 'date' ? null : rewardEditForm.quotaRefreshValue,
+                                      quotaRefreshDate: newType !== 'date' ? null : rewardEditForm.quotaRefreshDate,
+                                    });
+                                  }
+                                }}
+                                className="w-full px-2 py-1 border rounded text-xs"
+                              >
+                                <option value="">無</option>
+                                <option value="monthly">每月</option>
+                                <option value="date">指定日期</option>
+                              </select>
+                            </div>
+                            {(isNewRow ? rewardAddForm.quotaRefreshType : rewardEditForm.quotaRefreshType) === 'monthly' && (
+                              <div>
+                                <label className="text-xs font-medium block mb-1">每月幾號</label>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  max="31"
+                                  value={isNewRow ? (rewardAddForm.quotaRefreshValue || '') : (rewardEditForm.quotaRefreshValue || '')}
+                                  onChange={(e) => {
+                                    if (isNewRow) {
+                                      setRewardAddForm({ ...rewardAddForm, quotaRefreshValue: e.target.value });
+                                    } else {
+                                      setRewardEditForm({ ...rewardEditForm, quotaRefreshValue: e.target.value });
+                                    }
+                                  }}
+                                  className="w-full px-2 py-1 border rounded text-xs"
+                                />
+                              </div>
+                            )}
+                            {(isNewRow ? rewardAddForm.quotaRefreshType : rewardEditForm.quotaRefreshType) === 'date' && (
+                              <div>
+                                <label className="text-xs font-medium block mb-1">刷新日期</label>
+                                <input
+                                  type="date"
+                                  value={isNewRow ? (rewardAddForm.quotaRefreshDate || '') : (rewardEditForm.quotaRefreshDate || '')}
+                                  onChange={(e) => {
+                                    if (isNewRow) {
+                                      setRewardAddForm({ ...rewardAddForm, quotaRefreshDate: e.target.value });
+                                    } else {
+                                      setRewardEditForm({ ...rewardEditForm, quotaRefreshDate: e.target.value });
+                                    }
+                                  }}
+                                  className="w-full px-2 py-1 border rounded text-xs"
+                                />
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-xs">
+                            {quota.refreshTimes?.[originalIndex] || '-'}
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-sm">
-                        {(isEditing || (editingReward?.quotaIndex === quotaIndex && editingReward?.rewardIndex === originalIndex && editingReward?.groupKey === groupKey)) ? (
+                        {(isEditing || isEditingReward || isNewRow) ? (
                           <div className="flex gap-1">
                             <button
                               onClick={() => {
                                 if (isEditing) {
                                   handleSave();
-                                } else if (editingReward?.quotaIndex === quotaIndex && editingReward?.rewardIndex === originalIndex) {
+                                } else if (isEditingReward) {
                                   handleSaveReward();
+                                } else if (isNewRow) {
+                                  handleSaveNewReward();
                                 }
                               }}
                               className="px-2 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 transition-colors"
@@ -4377,6 +4530,7 @@ function QuotaSettings() {
                               onClick={() => {
                                 setEditingQuota(null);
                                 setEditingReward(null);
+                                setAddingReward(null);
                               }}
                               className="px-2 py-1 bg-gray-500 text-white rounded text-xs hover:bg-gray-600 transition-colors"
                             >
@@ -4397,6 +4551,14 @@ function QuotaSettings() {
                             >
                               編輯回饋
                             </button>
+                            {isFirstRow && !isAdding && (
+                              <button
+                                onClick={() => handleAddReward(quotaIndex, groupKey)}
+                                className="px-2 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600 transition-colors"
+                              >
+                                新增回饋組成
+                              </button>
+                            )}
                           </div>
                         )}
                       </td>

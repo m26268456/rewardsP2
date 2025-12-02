@@ -381,39 +381,61 @@ router.get('/', async (req: Request, res: Response) => {
     });
 
     // 轉換為前端需要的格式
-    const result = Array.from(quotaMap.entries()).map(([key, quota]) => {
-      // 按百分比排序
-      quota.rewards.sort((a, b) => a.percentage - b.percentage);
-      
-      // 解析key獲取schemeId和paymentMethodId
+    const result: Array<{
+      schemeId: string | null;
+      paymentMethodId: string | null;
+      name: string;
+      cardId: string | null;
+      paymentMethodIdForGroup: string | null;
+      cardName: string | null;
+      paymentMethodName: string | null;
+      schemeName: string | null;
+      rewardComposition: string;
+      calculationMethods: string[];
+      quotaLimits: Array<number | null>;
+      currentAmounts: number[];
+      usedQuotas: number[];
+      remainingQuotas: Array<number | null>;
+      referenceAmounts: Array<number | null>;
+      refreshTimes: string[];
+      rewardIds: string[];
+      quotaRefreshTypes: Array<string | null>;
+      quotaRefreshValues: Array<number | null>;
+      quotaRefreshDates: Array<string | null>;
+    }> = [];
+    
+    // 處理卡片方案的額度（只處理有 schemeId 且沒有 paymentMethodId 的）
+    quotaMap.forEach((quota, key) => {
       const [schemeId, paymentMethodId] = key.split('_');
-      
-      // 回饋組成應該用 / 連接，例如 0.3%/2.7%/3%
-      return {
-        schemeId: schemeId === 'null' ? null : schemeId,
-        paymentMethodId: paymentMethodId === 'null' ? null : paymentMethodId,
-        name: quota.name,
-        cardId: quota.cardId,
-        paymentMethodIdForGroup: quota.paymentMethodId,
-        cardName: quota.cardName,
-        paymentMethodName: quota.paymentMethodName,
-        schemeName: quota.schemeName,
-        rewardComposition: quota.rewards.map(r => `${r.percentage}%`).join('/'),
-        calculationMethods: quota.rewards.map(r => r.calculationMethod),
-        quotaLimits: quota.rewards.map(r => r.quotaLimit),
-        currentAmounts: quota.rewards.map(r => r.currentAmount),
-        usedQuotas: quota.rewards.map(r => r.usedQuota),
-        remainingQuotas: quota.rewards.map(r => r.remainingQuota),
-        referenceAmounts: quota.rewards.map(r => r.referenceAmount),
-        refreshTimes: quota.rewards.map(r => r.refreshTime),
-        rewardIds: quota.rewards.map(r => r.rewardId),
-        quotaRefreshTypes: quota.rewards.map(r => r.quotaRefreshType),
-        quotaRefreshValues: quota.rewards.map(r => r.quotaRefreshValue),
-        quotaRefreshDates: quota.rewards.map(r => r.quotaRefreshDate),
-      };
+      // 只處理卡片方案（有 schemeId 且沒有 paymentMethodId）
+      if (schemeId !== 'null' && paymentMethodId === 'null') {
+        quota.rewards.sort((a, b) => a.percentage - b.percentage);
+        result.push({
+          schemeId: schemeId,
+          paymentMethodId: null,
+          name: quota.name,
+          cardId: quota.cardId,
+          paymentMethodIdForGroup: null,
+          cardName: quota.cardName,
+          paymentMethodName: null,
+          schemeName: quota.schemeName,
+          rewardComposition: quota.rewards.map(r => `${r.percentage}%`).join('/'),
+          calculationMethods: quota.rewards.map(r => r.calculationMethod),
+          quotaLimits: quota.rewards.map(r => r.quotaLimit),
+          currentAmounts: quota.rewards.map(r => r.currentAmount),
+          usedQuotas: quota.rewards.map(r => r.usedQuota),
+          remainingQuotas: quota.rewards.map(r => r.remainingQuota),
+          referenceAmounts: quota.rewards.map(r => r.referenceAmount),
+          refreshTimes: quota.rewards.map(r => r.refreshTime),
+          rewardIds: quota.rewards.map(r => r.rewardId),
+          quotaRefreshTypes: quota.rewards.map(r => r.quotaRefreshType),
+          quotaRefreshValues: quota.rewards.map(r => r.quotaRefreshValue),
+          quotaRefreshDates: quota.rewards.map(r => r.quotaRefreshDate),
+        });
+      }
     });
 
-    // 添加支付方式的額度
+    // 添加支付方式的額度（只從 paymentQuotaMap 取得，避免重複）
     paymentQuotaMap.forEach((quota, key) => {
       quota.rewards.sort((a, b) => a.percentage - b.percentage);
       const [, paymentMethodId] = key.split('_');
