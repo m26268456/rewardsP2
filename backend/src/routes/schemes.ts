@@ -301,16 +301,16 @@ router.put('/:id/batch', async (req: Request, res: Response) => {
         if (validApps.length > 0) {
           // 使用 UNNEST 進行批量插入，明確指定所有類型
           const channelIds = validApps.map((app: any) => app.channelId);
-          const notes = validApps.map((app: any) => (app.note ? String(app.note) : null));
+          // 將 null 轉換為空字符串，然後在 SQL 中轉換回 NULL
+          const notes = validApps.map((app: any) => (app.note ? String(app.note) : ''));
           
           // 確保陣列不為空且長度一致
           if (channelIds.length > 0 && channelIds.length === notes.length) {
-            await client.query(
-              `INSERT INTO scheme_channel_applications (scheme_id, channel_id, note)
-               SELECT $1::uuid, unnest($2::uuid[]), unnest($3::text[])
-               ON CONFLICT (scheme_id, channel_id) DO UPDATE SET note = EXCLUDED.note`,
-              [id, channelIds, notes]
-            );
+            // 使用 CAST 確保類型正確，避免 node-postgres 自動轉換為 VALUES
+            const queryText = `INSERT INTO scheme_channel_applications (scheme_id, channel_id, note)
+                              SELECT $1::uuid, unnest(CAST($2 AS uuid[])), NULLIF(unnest(CAST($3 AS text[])), '')::text
+                              ON CONFLICT (scheme_id, channel_id) DO UPDATE SET note = EXCLUDED.note`;
+            await client.query(queryText, [id, channelIds, notes]);
           }
         }
       }
@@ -322,12 +322,11 @@ router.put('/:id/batch', async (req: Request, res: Response) => {
       if (exclusions && Array.isArray(exclusions) && exclusions.length > 0) {
         const validExclusions = exclusions.filter((channelId: any) => channelId && typeof channelId === 'string');
         if (validExclusions.length > 0) {
-          await client.query(
-            `INSERT INTO scheme_channel_exclusions (scheme_id, channel_id)
-             SELECT $1::uuid, unnest($2::uuid[])
-             ON CONFLICT (scheme_id, channel_id) DO NOTHING`,
-            [id, validExclusions]
-          );
+          // 使用 CAST 確保類型正確，避免 node-postgres 自動轉換為 VALUES
+          const queryText = `INSERT INTO scheme_channel_exclusions (scheme_id, channel_id)
+                            SELECT $1::uuid, unnest(CAST($2 AS uuid[]))
+                            ON CONFLICT (scheme_id, channel_id) DO NOTHING`;
+          await client.query(queryText, [id, validExclusions]);
         }
       }
 
@@ -450,16 +449,16 @@ router.put('/:id/channels', async (req: Request, res: Response) => {
         if (validApps.length > 0) {
           // 使用 UNNEST 進行批量插入，明確指定所有類型
           const channelIds = validApps.map((app: any) => app.channelId);
-          const notes = validApps.map((app: any) => (app.note ? String(app.note) : null));
+          // 將 null 轉換為空字符串，然後在 SQL 中轉換回 NULL
+          const notes = validApps.map((app: any) => (app.note ? String(app.note) : ''));
           
           // 確保陣列不為空且長度一致
           if (channelIds.length > 0 && channelIds.length === notes.length) {
-            await client.query(
-              `INSERT INTO scheme_channel_applications (scheme_id, channel_id, note)
-               SELECT $1::uuid, unnest($2::uuid[]), unnest($3::text[])
-               ON CONFLICT (scheme_id, channel_id) DO UPDATE SET note = EXCLUDED.note`,
-              [id, channelIds, notes]
-            );
+            // 使用 CAST 確保類型正確，避免 node-postgres 自動轉換為 VALUES
+            const queryText = `INSERT INTO scheme_channel_applications (scheme_id, channel_id, note)
+                              SELECT $1::uuid, unnest(CAST($2 AS uuid[])), NULLIF(unnest(CAST($3 AS text[])), '')::text
+                              ON CONFLICT (scheme_id, channel_id) DO UPDATE SET note = EXCLUDED.note`;
+            await client.query(queryText, [id, channelIds, notes]);
           }
         }
       }
@@ -471,12 +470,11 @@ router.put('/:id/channels', async (req: Request, res: Response) => {
       if (Array.isArray(exclusions) && exclusions.length > 0) {
         const validExclusions = exclusions.filter((channelId: any) => channelId && typeof channelId === 'string');
         if (validExclusions.length > 0) {
-          await client.query(
-            `INSERT INTO scheme_channel_exclusions (scheme_id, channel_id)
-             SELECT $1::uuid, unnest($2::uuid[])
-             ON CONFLICT (scheme_id, channel_id) DO NOTHING`,
-            [id, validExclusions]
-          );
+          // 使用 CAST 確保類型正確，避免 node-postgres 自動轉換為 VALUES
+          const queryText = `INSERT INTO scheme_channel_exclusions (scheme_id, channel_id)
+                            SELECT $1::uuid, unnest(CAST($2 AS uuid[]))
+                            ON CONFLICT (scheme_id, channel_id) DO NOTHING`;
+          await client.query(queryText, [id, validExclusions]);
         }
       }
 
