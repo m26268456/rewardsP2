@@ -22,8 +22,8 @@ export default function QuotaQuery() {
 
   useEffect(() => {
     loadQuotas();
-    // 每 30 秒重新載入一次（檢查是否需要刷新）- 優化：減少頻率但保持及時性
-    const interval = setInterval(loadQuotas, 30000);
+    // 每分鐘重新載入一次（檢查是否需要刷新）
+    const interval = setInterval(loadQuotas, 60000);
     return () => clearInterval(interval);
   }, []);
 
@@ -242,7 +242,7 @@ export default function QuotaQuery() {
     return (
       <div className="space-y-6">
         <h2 className="text-3xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">
-          額度管理
+          額度查詢
         </h2>
         <div className="flex items-center justify-center py-12">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600"></div>
@@ -255,7 +255,7 @@ export default function QuotaQuery() {
   return (
     <div className="space-y-6">
       <h2 className="text-3xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">
-        額度管理
+        額度查詢
       </h2>
 
       {!hasAnyQuota && (

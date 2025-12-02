@@ -1,58 +1,33 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError } from '../utils/errors';
 
-/**
- * 改進的錯誤處理中間件
- * 統一處理所有錯誤，提供一致的錯誤回應格式
- */
+export interface AppError extends Error {
+  statusCode?: number;
+  code?: string;
+}
+
 export const errorHandler = (
-  err: AppError | Error,
+  err: AppError,
   req: Request,
   res: Response,
   next: NextFunction
 ) => {
-  // 如果是自訂錯誤，使用其狀態碼和代碼
-  const statusCode = err instanceof AppError ? err.statusCode : 500;
+  const statusCode = err.statusCode || 500;
   const message = err.message || '伺服器內部錯誤';
-  const code = err instanceof AppError ? err.code : 'INTERNAL_ERROR';
 
-  // 記錄錯誤（生產環境不顯示堆疊）
-  const isDevelopment = process.env.NODE_ENV === 'development';
-  
-  // 如果是資料庫錯誤，記錄更詳細的資訊
-  const isDatabaseError = err.message.includes('password authentication') || 
-                          err.message.includes('database') ||
-                          err.message.includes('connection') ||
-                          (err as any).code?.startsWith('28') || // PostgreSQL connection errors
-                          (err as any).code === 'ECONNREFUSED';
-  
   console.error('錯誤:', {
     message: err.message,
-    code,
-    ...(isDatabaseError && {
-      dbErrorCode: (err as any).code,
-      dbDetail: (err as any).detail,
-      dbHint: (err as any).hint,
-    }),
-    stack: isDevelopment ? err.stack : undefined,
+    stack: err.stack,
     path: req.path,
     method: req.method,
-    timestamp: new Date().toISOString(),
   });
-
-  // 如果是 ValidationError，包含詳細資訊
-  const details = err instanceof AppError && 'details' in err 
-    ? (err as any).details 
-    : undefined;
 
   res.status(statusCode).json({
     success: false,
     error: {
-      message: isDevelopment ? message : (statusCode === 500 ? '伺服器內部錯誤' : message),
-      code,
-      ...(details && { details }),
-      ...(isDevelopment && { stack: err.stack }),
+      message,
+      ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
     },
   });
 };
+
 

@@ -1,8 +1,5 @@
-import { Router, Request, Response, NextFunction } from 'express';
+import { Router, Request, Response } from 'express';
 import { pool } from '../config/database';
-import { validateUUID } from '../middleware/validation';
-import { successResponse } from '../utils/response';
-import { NotFoundError, ValidationError } from '../utils/errors';
 
 const router = Router();
 
@@ -11,31 +8,35 @@ const router = Router();
 // ============================================
 
 // 更新卡片順序
-router.put('/cards/order', async (req: Request, res: Response, next: NextFunction) => {
-  const client = await pool.connect();
+router.put('/cards/order', async (req: Request, res: Response) => {
   try {
     const { orders } = req.body; // [{ id, displayOrder }]
 
     if (!Array.isArray(orders)) {
-      throw new ValidationError('請提供順序陣列');
+      return res.status(400).json({ success: false, error: '請提供順序陣列' });
     }
 
-    await client.query('BEGIN');
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
 
-    for (const order of orders) {
-      await client.query(
-        'UPDATE cards SET display_order = $1 WHERE id = $2',
-        [order.displayOrder, order.id]
-      );
+      for (const order of orders) {
+        await client.query(
+          'UPDATE cards SET display_order = $1 WHERE id = $2',
+          [order.displayOrder, order.id]
+        );
+      }
+
+      await client.query('COMMIT');
+      res.json({ success: true, message: '順序已更新' });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
     }
-
-    await client.query('COMMIT');
-    res.json(successResponse(null, '順序已更新'));
   } catch (error) {
-    await client.query('ROLLBACK');
-    next(error);
-  } finally {
-    client.release();
+    res.status(500).json({ success: false, error: (error as Error).message });
   }
 });
 
@@ -409,8 +410,8 @@ router.delete('/transactions/clear', async (req: Request, res: Response) => {
                    END,
                    current_amount = current_amount - $2,
                    updated_at = CURRENT_TIMESTAMP
-               WHERE scheme_id = $3::uuid AND reward_id = $4::uuid
-               AND (payment_method_id = $5::uuid OR (payment_method_id IS NULL AND $5::uuid IS NULL))`,
+               WHERE scheme_id = $3 AND reward_id = $4
+               AND (payment_method_id = $5 OR (payment_method_id IS NULL AND $5 IS NULL))`,
               [
                 calculatedReward,
                 parseFloat(transaction.amount),

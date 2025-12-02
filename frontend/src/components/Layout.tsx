@@ -10,7 +10,7 @@ const navItems = [
   { path: '/query', label: '回饋查詢' },
   { path: '/calculate', label: '回饋計算' },
   { path: '/transactions', label: '記帳功能' },
-  { path: '/quota', label: '額度管理' },
+  { path: '/quota', label: '額度查詢' },
   { path: '/settings', label: '管理設定' },
 ];
 

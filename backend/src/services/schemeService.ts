@@ -3,8 +3,6 @@ import { SchemeInfo, RewardComposition } from '../utils/types';
 
 /**
  * 取得所有卡片及其方案（用於方案總覽）
- * 優化版：使用批量查詢減少 N+1 問題
- * 從 101 次查詢減少到 4 次查詢
  */
 export async function getAllCardsWithSchemes(): Promise<
   Array<{
@@ -30,139 +28,104 @@ export async function getAllCardsWithSchemes(): Promise<
   }>
 > {
   try {
-    // 優化：使用批量查詢減少 N+1 問題
-    // 1. 取得所有卡片和方案（一次查詢）
-    const cardsSchemesResult = await pool.query(`
-      SELECT 
-        c.id as card_id,
-        c.name as card_name,
-        c.note as card_note,
-        c.display_order as card_display_order,
-        cs.id as scheme_id,
-        cs.name as scheme_name,
-        cs.note as scheme_note,
-        cs.requires_switch,
-        cs.activity_start_date,
-        cs.activity_end_date,
-        cs.display_order as scheme_display_order
-      FROM cards c
-      LEFT JOIN card_schemes cs ON c.id = cs.card_id
-      ORDER BY c.display_order, c.created_at, cs.display_order, cs.created_at
-    `);
+    // 取得所有卡片
+    const cardsResult = await pool.query(
+      'SELECT id, name, note, display_order FROM cards ORDER BY display_order, created_at'
+    );
 
-    // 2. 取得所有回饋組成（一次查詢）
-    const rewardsResult = await pool.query(`
-      SELECT 
-        scheme_id,
-        reward_percentage,
-        calculation_method,
-        quota_limit,
-        quota_refresh_type,
-        quota_refresh_value,
-        quota_refresh_date,
-        display_order
-      FROM scheme_rewards
-      ORDER BY scheme_id, display_order
-    `);
+    const cards = cardsResult.rows;
 
-    // 3. 取得所有排除通路（一次查詢）
-    const exclusionsResult = await pool.query(`
-      SELECT 
-        sce.scheme_id,
-        c.name as channel_name
-      FROM scheme_channel_exclusions sce
-      JOIN channels c ON sce.channel_id = c.id
-      ORDER BY sce.scheme_id, c.name
-    `);
+    // 為每個卡片取得方案
+    const cardsWithSchemes = await Promise.all(
+      cards.map(async (card) => {
+        const schemesResult = await pool.query(
+          `SELECT id, name, note, requires_switch, activity_start_date, activity_end_date, display_order
+           FROM card_schemes
+           WHERE card_id = $1
+           ORDER BY display_order, created_at`,
+          [card.id]
+        );
 
-    // 4. 取得所有適用通路（一次查詢）
-    const applicationsResult = await pool.query(`
-      SELECT 
-        sca.scheme_id,
-        c.id as channel_id,
-        c.name as channel_name,
-        sca.note
-      FROM scheme_channel_applications sca
-      JOIN channels c ON sca.channel_id = c.id
-      ORDER BY sca.scheme_id, c.name
-    `);
+        const schemes = await Promise.all(
+          schemesResult.rows.map(async (scheme) => {
+            // 取得回饋組成
+            const rewardsResult = await pool.query(
+              `SELECT reward_percentage, calculation_method, quota_limit, 
+                      quota_refresh_type, quota_refresh_value, quota_refresh_date, display_order
+               FROM scheme_rewards
+               WHERE scheme_id = $1
+               ORDER BY display_order`,
+              [scheme.id]
+            );
 
-    // 建立查找表
-    const rewardsMap = new Map<string, RewardComposition[]>();
-    rewardsResult.rows.forEach((r: any) => {
-      if (!rewardsMap.has(r.scheme_id)) {
-        rewardsMap.set(r.scheme_id, []);
-      }
-      rewardsMap.get(r.scheme_id)!.push({
-        percentage: r.reward_percentage ? parseFloat(r.reward_percentage) : 0,
-        calculationMethod: r.calculation_method || 'round',
-        quotaLimit: r.quota_limit ? parseFloat(r.quota_limit) : null,
-        quotaRefreshType: r.quota_refresh_type || null,
-        quotaRefreshValue: r.quota_refresh_value || null,
-        quotaRefreshDate: r.quota_refresh_date
-          ? r.quota_refresh_date.toISOString().split('T')[0]
-          : null,
-      });
-    });
+            const rewards: RewardComposition[] = rewardsResult.rows.map((r) => ({
+              percentage: r.reward_percentage ? parseFloat(r.reward_percentage) : 0,
+              calculationMethod: r.calculation_method || 'round',
+              quotaLimit: r.quota_limit ? parseFloat(r.quota_limit) : null,
+              quotaRefreshType: r.quota_refresh_type || null,
+              quotaRefreshValue: r.quota_refresh_value || null,
+              quotaRefreshDate: r.quota_refresh_date
+                ? r.quota_refresh_date.toISOString().split('T')[0]
+                : null,
+            }));
 
-    const exclusionsMap = new Map<string, string[]>();
-    exclusionsResult.rows.forEach((r: any) => {
-      if (!exclusionsMap.has(r.scheme_id)) {
-        exclusionsMap.set(r.scheme_id, []);
-      }
-      exclusionsMap.get(r.scheme_id)!.push(r.channel_name);
-    });
+            // 取得排除通路
+            const exclusionsResult = await pool.query(
+              `SELECT c.id, c.name
+               FROM scheme_channel_exclusions sce
+               JOIN channels c ON sce.channel_id = c.id
+               WHERE sce.scheme_id = $1`,
+              [scheme.id]
+            );
 
-    const applicationsMap = new Map<string, Array<{ channelId: string; channelName: string; note?: string }>>();
-    applicationsResult.rows.forEach((r: any) => {
-      if (!applicationsMap.has(r.scheme_id)) {
-        applicationsMap.set(r.scheme_id, []);
-      }
-      applicationsMap.get(r.scheme_id)!.push({
-        channelId: r.channel_id,
-        channelName: r.channel_name,
-        note: r.note || undefined,
-      });
-    });
+            const exclusions = exclusionsResult.rows.map((r) => r.name);
 
-    // 組合結果
-    const cardsMap = new Map<string, any>();
-    cardsSchemesResult.rows.forEach((row: any) => {
-      if (!cardsMap.has(row.card_id)) {
-        cardsMap.set(row.card_id, {
-          id: row.card_id,
-          name: row.card_name,
-          note: row.card_note || undefined,
-          displayOrder: row.card_display_order || 0,
-          schemes: [],
-        });
-      }
+            // 取得適用通路
+            const applicationsResult = await pool.query(
+              `SELECT c.id, c.name, sca.note
+               FROM scheme_channel_applications sca
+               JOIN channels c ON sca.channel_id = c.id
+               WHERE sca.scheme_id = $1`,
+              [scheme.id]
+            );
 
-      if (row.scheme_id) {
-        const card = cardsMap.get(row.card_id)!;
-        card.schemes.push({
-          id: row.scheme_id,
-          name: row.scheme_name,
-          note: row.scheme_note || undefined,
-          requiresSwitch: row.requires_switch || false,
-          activityStartDate: row.activity_start_date
-            ? (row.activity_start_date instanceof Date
-                ? row.activity_start_date.toISOString().split('T')[0]
-                : String(row.activity_start_date).split('T')[0])
-            : undefined,
-          activityEndDate: row.activity_end_date
-            ? (row.activity_end_date instanceof Date
-                ? row.activity_end_date.toISOString().split('T')[0]
-                : String(row.activity_end_date).split('T')[0])
-            : undefined,
-          rewards: rewardsMap.get(row.scheme_id) || [],
-          exclusions: exclusionsMap.get(row.scheme_id) || [],
-          applications: applicationsMap.get(row.scheme_id) || [],
-        });
-      }
-    });
+            const applications = applicationsResult.rows.map((r) => ({
+              channelId: r.id,
+              channelName: r.name,
+              note: r.note || undefined,
+            }));
 
-    const cardsWithSchemes = Array.from(cardsMap.values());
+            return {
+              id: scheme.id,
+              name: scheme.name,
+              note: scheme.note || undefined,
+              requiresSwitch: scheme.requires_switch || false,
+              activityStartDate: scheme.activity_start_date
+                ? (scheme.activity_start_date instanceof Date
+                    ? scheme.activity_start_date.toISOString().split('T')[0]
+                    : String(scheme.activity_start_date).split('T')[0])
+                : undefined,
+              activityEndDate: scheme.activity_end_date
+                ? (scheme.activity_end_date instanceof Date
+                    ? scheme.activity_end_date.toISOString().split('T')[0]
+                    : String(scheme.activity_end_date).split('T')[0])
+                : undefined,
+              rewards,
+              exclusions,
+              applications,
+            };
+          })
+        );
+
+        return {
+          id: card.id,
+          name: card.name,
+          note: card.note || undefined,
+          displayOrder: card.display_order || 0,
+          schemes,
+        };
+      })
+    );
 
     return cardsWithSchemes;
   } catch (error) {

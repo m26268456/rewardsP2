@@ -1,33 +1,32 @@
-import { Router, Request, Response, NextFunction } from 'express';
+import { Router, Request, Response } from 'express';
 import { pool } from '../config/database';
-import { getAllCardsWithSchemes, queryChannelRewards } from '../services/schemeService';
-import { queryChannelRewardsByKeywords } from '../services/ChannelSearchService';
-import { successResponse } from '../utils/response';
+import { getAllCardsWithSchemes, queryChannelRewards, queryChannelRewardsByKeywords } from '../services/schemeService';
 
 const router = Router();
 
 // 取得所有卡片及其方案（方案總覽）
-router.get('/overview', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/overview', async (req: Request, res: Response) => {
   try {
     console.log('📥 收到方案總覽請求');
     const data = await getAllCardsWithSchemes();
     console.log('✅ 方案總覽數據獲取成功，卡片數量:', data.length);
-    res.json(successResponse(data));
+    res.json({ success: true, data });
   } catch (error) {
     console.error('❌ 取得方案總覽錯誤:', error);
-    next(error);
+    console.error('錯誤堆棧:', (error as Error).stack);
+    res.status(500).json({ success: false, error: (error as Error).message });
   }
 });
 
 // 查詢通路回饋
-router.post('/query-channels', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/query-channels', async (req: Request, res: Response) => {
   try {
     const { channelIds, keywords } = req.body;
 
     // 如果提供關鍵字，使用關鍵字查詢
     if (keywords && Array.isArray(keywords) && keywords.length > 0) {
       const results = await queryChannelRewardsByKeywords(keywords);
-      res.json(successResponse(results));
+      res.json({ success: true, data: results });
       return;
     }
 
@@ -35,36 +34,33 @@ router.post('/query-channels', async (req: Request, res: Response, next: NextFun
     if (!Array.isArray(channelIds) || channelIds.length === 0) {
       return res.status(400).json({
         success: false,
-        error: {
-          message: '請提供通路 ID 陣列或關鍵字陣列',
-          code: 'VALIDATION_ERROR',
-        },
+        error: '請提供通路 ID 陣列或關鍵字陣列',
       });
     }
 
     const results = await queryChannelRewards(channelIds);
-    res.json(successResponse(results));
+    res.json({ success: true, data: results });
   } catch (error) {
-    next(error);
+    res.status(500).json({ success: false, error: (error as Error).message });
   }
 });
 
 // 取得卡片的所有方案
-router.get('/card/:cardId', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/card/:cardId', async (req: Request, res: Response) => {
   try {
     const { cardId } = req.params;
 
     const result = await pool.query(
       `SELECT id, name, note, requires_switch, activity_start_date, activity_end_date, display_order
        FROM card_schemes
-       WHERE card_id = $1::uuid
+       WHERE card_id = $1
        ORDER BY display_order, created_at`,
       [cardId]
     );
 
-    res.json(successResponse(result.rows));
+    res.json({ success: true, data: result.rows });
   } catch (error) {
-    next(error);
+    res.status(500).json({ success: false, error: (error as Error).message });
   }
 });
 
@@ -94,13 +90,6 @@ router.post('/', async (req: Request, res: Response) => {
     try {
       await client.query('BEGIN');
 
-      // 取得該卡片的最大 display_order，新增在最下方
-      const maxOrderResult = await client.query(
-        'SELECT COALESCE(MAX(display_order), 0) as max_order FROM card_schemes WHERE card_id = $1',
-        [cardId]
-      );
-      const maxOrder = maxOrderResult.rows[0]?.max_order || 0;
-
       // 新增方案
       const schemeResult = await client.query(
         `INSERT INTO card_schemes (card_id, name, note, requires_switch, activity_start_date, activity_end_date, display_order)
@@ -113,7 +102,7 @@ router.post('/', async (req: Request, res: Response) => {
           requiresSwitch || false,
           activityStartDate || null,
           activityEndDate || null,
-          maxOrder + 1,
+          displayOrder || 0,
         ]
       );
 

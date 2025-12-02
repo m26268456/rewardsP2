@@ -3,7 +3,6 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { pool } from './config/database';
 import { errorHandler } from './middleware/errorHandler';
-import { apiLimiter } from './middleware/rateLimiter';
 import { startQuotaRefreshScheduler } from './services/quotaRefreshScheduler';
 
 // 路由
@@ -23,28 +22,10 @@ dotenv.config();
 const app = express();
 const PORT = parseInt(process.env.PORT || '3001', 10);
 
-// CORS 配置（改進安全性）
-const corsOptions = {
-  origin: process.env.ALLOWED_ORIGINS
-    ? process.env.ALLOWED_ORIGINS.split(',')
-    : '*', // 生產環境應該設定具體的來源
-  credentials: true,
-  optionsSuccessStatus: 200,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-};
-
-// 信任代理（Railway 和其他雲端平台使用代理）
-// 這對於正確處理 X-Forwarded-For header 很重要
-app.set('trust proxy', true);
-
 // 中間件
-app.use(cors(corsOptions));
-app.use(express.json({ limit: '10mb' })); // 限制請求體大小
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-// 速率限制（保護 API）
-app.use('/api/', apiLimiter);
+app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // 根路徑
 app.get('/', (req, res) => {
@@ -88,7 +69,7 @@ app.use('/api/settings', settingsRouter);
 app.use('/api/seed', seedRouter);
 app.use('/api/import', importDataRouter);
 
-// 錯誤處理（必須放在最後）
+// 錯誤處理
 app.use(errorHandler);
 
 // 啟動伺服器
@@ -96,9 +77,7 @@ app.use(errorHandler);
 const HOST = process.env.HOST || '0.0.0.0';
 const server = app.listen(PORT, HOST, () => {
   console.log(`🚀 後端服務運行於 http://${HOST}:${PORT}`);
-  console.log(`📝 環境: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🔒 CORS 來源: ${corsOptions.origin === '*' ? '所有來源' : corsOptions.origin}`);
-
+  
   // 啟動額度刷新定時任務
   startQuotaRefreshScheduler();
 });
@@ -120,18 +99,6 @@ server.on('error', (error: NodeJS.ErrnoException) => {
 // 優雅關閉
 process.on('SIGTERM', async () => {
   console.log('SIGTERM 信號 received: 關閉 HTTP 伺服器');
-  server.close(() => {
-    console.log('HTTP 伺服器已關閉');
-  });
-  await pool.end();
-  process.exit(0);
-});
-
-process.on('SIGINT', async () => {
-  console.log('SIGINT 信號 received: 關閉 HTTP 伺服器');
-  server.close(() => {
-    console.log('HTTP 伺服器已關閉');
-  });
   await pool.end();
   process.exit(0);
 });

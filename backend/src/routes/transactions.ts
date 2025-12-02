@@ -1,26 +1,16 @@
-import { Router, Request, Response, NextFunction } from 'express';
+import { Router, Request, Response } from 'express';
 import { pool } from '../config/database';
 import { calculateTotalReward } from '../utils/rewardCalculation';
 import { utcToZonedTime, format as formatTz } from 'date-fns-tz';
 import * as XLSX from 'xlsx';
-import { validate } from '../middleware/validation';
-import { validateUUID } from '../middleware/validation';
-import { createTransactionSchema } from '../validators/transactionValidator';
-import { TransactionService } from '../services/transactionService';
-import { successResponse } from '../utils/response';
-import { ValidationError, NotFoundError, DatabaseError } from '../utils/errors';
 
 // 時區設定：UTC+8 (Asia/Taipei)
 const TIMEZONE = 'Asia/Taipei';
 
 const router = Router();
-const transactionService = new TransactionService(pool);
 
-/**
- * 取得所有交易記錄
- * 優化：改進錯誤處理
- */
-router.get('/', async (req: Request, res: Response, next: NextFunction) => {
+// 取得所有交易記錄
+router.get('/', async (req: Request, res: Response) => {
   try {
     const result = await pool.query(
       `SELECT t.id, t.transaction_date, t.reason, t.amount, t.note, t.created_at,
@@ -42,41 +32,86 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
        ORDER BY t.created_at DESC`
     );
 
-    res.json(successResponse(result.rows));
+    res.json({ success: true, data: result.rows });
   } catch (error) {
-    next(error);
+    res.status(500).json({ success: false, error: (error as Error).message });
   }
 });
 
-/**
- * 新增交易記錄
- * 優化：使用驗證中間件、提取驗證邏輯到 Service 層、改進錯誤處理
- */
-router.post(
-  '/',
-  validate(createTransactionSchema),
-  async (req: Request, res: Response, next: NextFunction) => {
+// 新增交易記錄
+router.post('/', async (req: Request, res: Response) => {
+  try {
+    const {
+      transactionDate,
+      reason,
+      amount,
+      typeId,
+      note,
+      schemeId,
+      paymentMethodId,
+    } = req.body;
+
+    if (!transactionDate || !reason || !typeId) {
+      return res.status(400).json({
+        success: false,
+        error: '日期、事由、類型為必填欄位',
+      });
+    }
+
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
 
-      const {
-        transactionDate,
-        reason,
-        amount,
-        typeId,
-        note,
-        schemeId,
-        paymentMethodId,
-      } = req.body;
-
       // 驗證 schemeId 和 paymentMethodId
-      const { validSchemeId, validPaymentMethodId } =
-        await transactionService.validateTransactionInput(
-          schemeId || null,
-          paymentMethodId || null,
-          client
+      // 如果只有 paymentMethodId（純支付方式），不需要 schemeId
+      let validSchemeId: string | null = null;
+      let validPaymentMethodId: string | null = null;
+      
+      if (paymentMethodId && !schemeId) {
+        // 純支付方式
+        const paymentCheck = await client.query(
+          'SELECT id FROM payment_methods WHERE id = $1',
+          [paymentMethodId]
         );
+        if (paymentCheck.rows.length === 0) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({
+            success: false,
+            error: '無效的支付方式 ID',
+          });
+        }
+        validPaymentMethodId = paymentMethodId;
+      } else if (schemeId) {
+        // 有 schemeId 的情況（可能同時有 paymentMethodId）
+        const schemeCheck = await client.query(
+          'SELECT id FROM card_schemes WHERE id = $1',
+          [schemeId]
+        );
+        if (schemeCheck.rows.length === 0) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({
+            success: false,
+            error: '無效的方案 ID',
+          });
+        }
+        validSchemeId = schemeId;
+        
+        // 如果同時提供了 paymentMethodId，驗證它是否存在
+        if (paymentMethodId) {
+          const paymentCheck = await client.query(
+            'SELECT id FROM payment_methods WHERE id = $1',
+            [paymentMethodId]
+          );
+          if (paymentCheck.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({
+              success: false,
+              error: '無效的支付方式 ID',
+            });
+          }
+          validPaymentMethodId = paymentMethodId;
+        }
+      }
 
       // 新增交易
       const transactionResult = await client.query(
@@ -131,8 +166,8 @@ router.post(
           const quotaResult = await client.query(
             `SELECT id, used_quota, remaining_quota, current_amount
              FROM quota_trackings
-             WHERE scheme_id = $1::uuid AND reward_id = $2::uuid 
-             AND (payment_method_id = $3::uuid OR (payment_method_id IS NULL AND $3::uuid IS NULL))`,
+             WHERE scheme_id = $1 AND reward_id = $2 
+             AND (payment_method_id = $3 OR (payment_method_id IS NULL AND $3 IS NULL))`,
             [validSchemeId, reward.id, validPaymentMethodId]
           );
 
@@ -142,8 +177,7 @@ router.post(
             const newRemainingQuota = quota.remaining_quota
               ? parseFloat(quota.remaining_quota) - calculatedReward
               : null;
-            const newCurrentAmount =
-              parseFloat(quota.current_amount) + parseFloat(amount);
+            const newCurrentAmount = parseFloat(quota.current_amount) + parseFloat(amount);
 
             await client.query(
               `UPDATE quota_trackings
@@ -164,7 +198,7 @@ router.post(
             await client.query(
               `INSERT INTO quota_trackings 
                (scheme_id, payment_method_id, reward_id, used_quota, remaining_quota, current_amount)
-               VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6)`,
+               VALUES ($1, $2, $3, $4, $5, $6)`,
               [
                 validSchemeId,
                 validPaymentMethodId,
@@ -180,29 +214,26 @@ router.post(
 
       await client.query('COMMIT');
 
-      res.json(successResponse(transaction, '交易已建立'));
+      res.json({ success: true, data: transaction });
     } catch (error) {
       await client.query('ROLLBACK');
-      next(error);
+      throw error;
     } finally {
       client.release();
     }
+  } catch (error) {
+    res.status(500).json({ success: false, error: (error as Error).message });
   }
-);
+});
 
-/**
- * 刪除交易記錄
- * 優化：改進錯誤處理
- */
-router.delete(
-  '/:id',
-  validateUUID('id'),
-  async (req: Request, res: Response, next: NextFunction) => {
+// 刪除交易記錄
+router.delete('/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-
-      const { id } = req.params;
 
       // 取得交易資訊（包含方案和金額）
       const transactionResult = await client.query(
@@ -213,7 +244,7 @@ router.delete(
       );
 
       if (transactionResult.rows.length === 0) {
-        throw new NotFoundError('交易');
+        return res.status(404).json({ success: false, error: '交易不存在' });
       }
 
       const transaction = transactionResult.rows[0];
@@ -251,8 +282,8 @@ router.delete(
                  END,
                  current_amount = current_amount - $2,
                  updated_at = CURRENT_TIMESTAMP
-             WHERE scheme_id = $3::uuid AND reward_id = $4::uuid
-             AND (payment_method_id = $5::uuid OR (payment_method_id IS NULL AND $5::uuid IS NULL))`,
+             WHERE scheme_id = $3 AND reward_id = $4
+             AND (payment_method_id = $5 OR (payment_method_id IS NULL AND $5 IS NULL))`,
             [
               calculatedReward,
               parseFloat(transaction.amount),
@@ -269,21 +300,20 @@ router.delete(
 
       await client.query('COMMIT');
 
-      res.json(successResponse(null, '交易已刪除'));
+      res.json({ success: true, message: '交易已刪除' });
     } catch (error) {
       await client.query('ROLLBACK');
-      next(error);
+      throw error;
     } finally {
       client.release();
     }
+  } catch (error) {
+    res.status(500).json({ success: false, error: (error as Error).message });
   }
-);
+});
 
-/**
- * 導出交易明細（Excel）
- * 優化：改進錯誤處理
- */
-router.get('/export', async (req: Request, res: Response, next: NextFunction) => {
+// 導出交易明細（Excel）
+router.get('/export', async (req: Request, res: Response) => {
   try {
     const result = await pool.query(
       `SELECT t.transaction_date, t.reason, t.amount, t.note, t.created_at,
@@ -304,6 +334,7 @@ router.get('/export', async (req: Request, res: Response, next: NextFunction) =>
     // 轉換為 Excel 格式（使用 UTC+8 時區）
     const formatDate = (date: Date | string | null) => {
       if (!date) return '';
+      // 將 UTC 時間轉換為 UTC+8 時區
       const utcDate = typeof date === 'string' ? new Date(date) : date;
       const taipeiDate = utcToZonedTime(utcDate, TIMEZONE);
       return formatTz(taipeiDate, 'yyyy/MM/dd', { timeZone: TIMEZONE });
@@ -311,6 +342,7 @@ router.get('/export', async (req: Request, res: Response, next: NextFunction) =>
 
     const formatDateTime = (date: Date | string | null) => {
       if (!date) return '';
+      // 將 UTC 時間轉換為 UTC+8 時區
       const utcDate = typeof date === 'string' ? new Date(date) : date;
       const taipeiDate = utcToZonedTime(utcDate, TIMEZONE);
       return formatTz(taipeiDate, 'yyyy/MM/dd HH:mm:ss', { timeZone: TIMEZONE });
@@ -334,7 +366,7 @@ router.get('/export', async (req: Request, res: Response, next: NextFunction) =>
     const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
 
     const filename = `交易明細_${new Date().toISOString().split('T')[0]}.xlsx`;
-
+    
     res.setHeader(
       'Content-Type',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
@@ -345,7 +377,7 @@ router.get('/export', async (req: Request, res: Response, next: NextFunction) =>
     );
     res.send(buffer);
   } catch (error) {
-    next(error);
+    res.status(500).json({ success: false, error: (error as Error).message });
   }
 });
 

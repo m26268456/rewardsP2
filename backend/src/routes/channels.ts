@@ -1,13 +1,10 @@
-import { Router, Request, Response, NextFunction } from 'express';
+import { Router, Request, Response } from 'express';
 import { pool } from '../config/database';
-import { validateUUID } from '../middleware/validation';
-import { successResponse } from '../utils/response';
-import { NotFoundError } from '../utils/errors';
 
 const router = Router();
 
 // 取得所有通路
-router.get('/', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
     console.log('📥 收到通路查詢請求, commonOnly:', req.query.commonOnly);
     const { commonOnly } = req.query;
@@ -23,9 +20,11 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
 
     const result = await pool.query(query, params);
     console.log('✅ 通路數據獲取成功，數量:', result.rows.length);
-    res.json(successResponse(result.rows));
+    res.json({ success: true, data: result.rows });
   } catch (error) {
-    next(error);
+    console.error('❌ 取得通路錯誤:', error);
+    console.error('錯誤堆棧:', (error as Error).stack);
+    res.status(500).json({ success: false, error: (error as Error).message });
   }
 });
 
@@ -163,23 +162,17 @@ router.get('/search', async (req: Request, res: Response) => {
 // 新增通路
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const { name, isCommon } = req.body;
+    const { name, isCommon, displayOrder } = req.body;
 
     if (!name) {
       return res.status(400).json({ success: false, error: '通路名稱必填' });
     }
 
-    // 取得最大 display_order，新增在最下方
-    const maxOrderResult = await pool.query(
-      'SELECT COALESCE(MAX(display_order), 0) as max_order FROM channels'
-    );
-    const maxOrder = maxOrderResult.rows[0]?.max_order || 0;
-
     const result = await pool.query(
       `INSERT INTO channels (name, is_common, display_order)
        VALUES ($1, $2, $3)
        RETURNING id, name, is_common, display_order`,
-      [name, isCommon || false, maxOrder + 1]
+      [name, isCommon || false, displayOrder || 0]
     );
 
     res.json({ success: true, data: result.rows[0] });
@@ -189,7 +182,7 @@ router.post('/', async (req: Request, res: Response) => {
 });
 
 // 更新通路
-router.put('/:id', validateUUID('id'), async (req: Request, res: Response, next: NextFunction) => {
+router.put('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { name, isCommon, displayOrder } = req.body;
@@ -203,17 +196,17 @@ router.put('/:id', validateUUID('id'), async (req: Request, res: Response, next:
     );
 
     if (result.rows.length === 0) {
-      throw new NotFoundError('通路');
+      return res.status(404).json({ success: false, error: '通路不存在' });
     }
 
-    res.json(successResponse(result.rows[0], '通路已更新'));
+    res.json({ success: true, data: result.rows[0] });
   } catch (error) {
-    next(error);
+    res.status(500).json({ success: false, error: (error as Error).message });
   }
 });
 
 // 刪除通路
-router.delete('/:id', validateUUID('id'), async (req: Request, res: Response, next: NextFunction) => {
+router.delete('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
@@ -223,12 +216,12 @@ router.delete('/:id', validateUUID('id'), async (req: Request, res: Response, ne
     );
 
     if (result.rows.length === 0) {
-      throw new NotFoundError('通路');
+      return res.status(404).json({ success: false, error: '通路不存在' });
     }
 
-    res.json(successResponse(null, '通路已刪除'));
+    res.json({ success: true, message: '通路已刪除' });
   } catch (error) {
-    next(error);
+    res.status(500).json({ success: false, error: (error as Error).message });
   }
 });
 

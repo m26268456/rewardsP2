@@ -1,14 +1,11 @@
-import { Router, Request, Response, NextFunction } from 'express';
+import { Router, Request, Response } from 'express';
 import { pool } from '../config/database';
 import { getAllPaymentMethods } from '../services/paymentService';
-import { validateUUID } from '../middleware/validation';
-import { successResponse } from '../utils/response';
-import { NotFoundError } from '../utils/errors';
 
 const router = Router();
 
 // 取得所有支付方式（用於管理）
-router.get('/', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
     const result = await pool.query(
       `SELECT pm.id, pm.name, pm.note, pm.own_reward_percentage, pm.display_order,
@@ -27,44 +24,40 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
        ORDER BY pm.display_order, pm.created_at`
     );
 
-    res.json(successResponse(result.rows));
+    res.json({ success: true, data: result.rows });
   } catch (error) {
-    next(error);
+    res.status(500).json({ success: false, error: (error as Error).message });
   }
 });
 
 // 取得所有支付方式（用於方案總覽）
-router.get('/overview', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/overview', async (req: Request, res: Response) => {
   try {
     console.log('📥 收到支付方式總覽請求');
     const data = await getAllPaymentMethods();
     console.log('✅ 支付方式總覽數據獲取成功，數量:', data.length);
-    res.json(successResponse(data));
+    res.json({ success: true, data });
   } catch (error) {
-    next(error);
+    console.error('❌ 取得支付方式總覽錯誤:', error);
+    console.error('錯誤堆棧:', (error as Error).stack);
+    res.status(500).json({ success: false, error: (error as Error).message });
   }
 });
 
 // 新增支付方式
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const { name, note } = req.body;
+    const { name, note, displayOrder } = req.body;
 
     if (!name) {
       return res.status(400).json({ success: false, error: '支付方式名稱必填' });
     }
 
-    // 取得最大 display_order，新增在最下方
-    const maxOrderResult = await pool.query(
-      'SELECT COALESCE(MAX(display_order), 0) as max_order FROM payment_methods'
-    );
-    const maxOrder = maxOrderResult.rows[0]?.max_order || 0;
-
     const result = await pool.query(
       `INSERT INTO payment_methods (name, note, own_reward_percentage, display_order)
        VALUES ($1, $2, $3, $4)
        RETURNING id, name, note, own_reward_percentage, display_order`,
-      [name, note || null, 0, maxOrder + 1] // 不再使用本身回饋，統一使用回饋組成
+      [name, note || null, 0, displayOrder || 0] // 不再使用本身回饋，統一使用回饋組成
     );
 
     res.json({ success: true, data: result.rows[0] });
@@ -74,7 +67,7 @@ router.post('/', async (req: Request, res: Response) => {
 });
 
 // 更新支付方式
-router.put('/:id', validateUUID('id'), async (req: Request, res: Response, next: NextFunction) => {
+router.put('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { name, note, displayOrder } = req.body;
@@ -89,17 +82,17 @@ router.put('/:id', validateUUID('id'), async (req: Request, res: Response, next:
     );
 
     if (result.rows.length === 0) {
-      throw new NotFoundError('支付方式');
+      return res.status(404).json({ success: false, error: '支付方式不存在' });
     }
 
-    res.json(successResponse(result.rows[0], '支付方式已更新'));
+    res.json({ success: true, data: result.rows[0] });
   } catch (error) {
-    next(error);
+    res.status(500).json({ success: false, error: (error as Error).message });
   }
 });
 
 // 刪除支付方式
-router.delete('/:id', validateUUID('id'), async (req: Request, res: Response, next: NextFunction) => {
+router.delete('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
@@ -109,12 +102,12 @@ router.delete('/:id', validateUUID('id'), async (req: Request, res: Response, ne
     );
 
     if (result.rows.length === 0) {
-      throw new NotFoundError('支付方式');
+      return res.status(404).json({ success: false, error: '支付方式不存在' });
     }
 
-    res.json(successResponse(null, '支付方式已刪除'));
+    res.json({ success: true, message: '支付方式已刪除' });
   } catch (error) {
-    next(error);
+    res.status(500).json({ success: false, error: (error as Error).message });
   }
 });
 
