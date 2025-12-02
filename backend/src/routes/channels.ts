@@ -29,8 +29,6 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
-import { parseChannelName, matchesChannelName } from '../utils/channelUtils';
-
 // 根據名稱查詢通路（用於手動輸入，支持別稱）
 router.get('/search', async (req: Request, res: Response) => {
   try {

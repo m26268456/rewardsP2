@@ -88,7 +88,7 @@ server.on('error', (error: NodeJS.ErrnoException) => {
   if (error.code === 'EADDRINUSE') {
     console.error(`❌ 端口 ${env.PORT} 已被佔用，請關閉佔用該端口的進程或更改 PORT 環境變數`);
     console.error(`💡 提示：可以使用以下命令查看佔用端口的進程：`);
-    console.error(`   netstat -ano | findstr :${PORT}`);
+    console.error(`   netstat -ano | findstr :${env.PORT}`);
     console.error(`   然後使用 taskkill /F /PID <進程ID> 關閉進程`);
     process.exit(1);
   } else {
