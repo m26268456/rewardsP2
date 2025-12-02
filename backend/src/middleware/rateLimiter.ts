@@ -16,9 +16,8 @@ export const apiLimiter = rateLimit({
   },
   standardHeaders: true, // 返回標準的 RateLimit-* headers
   legacyHeaders: false, // 禁用 X-RateLimit-* headers
-  // 信任代理（Railway 使用代理）
-  trustProxy: true,
-  // 自定義 key 生成器，正確處理 X-Forwarded-For
+  // 自定義 key 生成器，正確處理 X-Forwarded-For（Railway 使用代理）
+  // 注意：trustProxy 應該在 Express app 層級設定（已在 index.ts 中設定）
   keyGenerator: (req) => {
     // 如果使用代理，從 X-Forwarded-For 獲取真實 IP
     const forwarded = req.headers['x-forwarded-for'];
