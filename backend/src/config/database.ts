@@ -7,8 +7,25 @@ dotenv.config();
 // Railway 會自動提供 DATABASE_URL 環境變數，優先使用它
 // 如果沒有設定環境變數，根據運行環境自動選擇主機名
 let databaseUrl = process.env.DATABASE_URL;
+
+// 檢查 Railway 環境變數（Railway 會自動設定這些）
+const isRailway = !!(
+  process.env.RAILWAY_ENVIRONMENT || 
+  process.env.RAILWAY_PROJECT_ID ||
+  process.env.RAILWAY_SERVICE_NAME
+);
+
 const isDocker = process.env.DOCKER_ENV === 'true' || process.env.DATABASE_URL?.includes('@postgres:');
-const isRailway = process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PROJECT_ID;
+
+// 記錄環境資訊
+console.log('🔍 環境檢測:', {
+  hasDatabaseUrl: !!databaseUrl,
+  isRailway,
+  isDocker,
+  railwayEnv: process.env.RAILWAY_ENVIRONMENT,
+  railwayProject: process.env.RAILWAY_PROJECT_ID,
+  railwayService: process.env.RAILWAY_SERVICE_NAME,
+});
 
 if (!databaseUrl) {
   // 檢測是否在 Docker 環境中
@@ -51,14 +68,27 @@ try {
     protocol: url.protocol,
     host: url.hostname,
     port: url.port || '5432 (預設)',
-    database: url.pathname.replace('/', ''),
+    database: url.pathname.replace('/', '') || '未設定',
     user: url.username || '未設定',
     hasPassword: !!url.password,
+    passwordLength: url.password ? url.password.length : 0,
     isRailway: !!isRailway,
   });
   console.log('📊 完整連接字串（隱藏密碼）:', databaseUrl.replace(/:[^:@]+@/, ':****@'));
+  
+  // 驗證必要資訊
+  if (!url.username) {
+    console.error('❌ 警告：DATABASE_URL 中沒有用戶名');
+  }
+  if (!url.password) {
+    console.error('❌ 警告：DATABASE_URL 中沒有密碼');
+  }
+  if (!url.pathname || url.pathname === '/') {
+    console.error('❌ 警告：DATABASE_URL 中沒有資料庫名稱');
+  }
 } catch (error) {
   console.error('❌ DATABASE_URL 格式錯誤:', error);
+  console.error('📊 DATABASE_URL 原始值（前50字符）:', databaseUrl?.substring(0, 50));
   throw new Error('DATABASE_URL 格式不正確，請檢查環境變數設定');
 }
 

@@ -16,6 +16,19 @@ export const apiLimiter = rateLimit({
   },
   standardHeaders: true, // 返回標準的 RateLimit-* headers
   legacyHeaders: false, // 禁用 X-RateLimit-* headers
+  // 信任代理（Railway 使用代理）
+  trustProxy: true,
+  // 自定義 key 生成器，正確處理 X-Forwarded-For
+  keyGenerator: (req) => {
+    // 如果使用代理，從 X-Forwarded-For 獲取真實 IP
+    const forwarded = req.headers['x-forwarded-for'];
+    if (forwarded) {
+      // X-Forwarded-For 可能包含多個 IP，取第一個
+      const ips = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+      return ips.split(',')[0].trim() || req.ip;
+    }
+    return req.ip || req.socket.remoteAddress || 'unknown';
+  },
 });
 
 /**

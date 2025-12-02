@@ -34,6 +34,10 @@ const corsOptions = {
   allowedHeaders: ['Content-Type', 'Authorization'],
 };
 
+// 信任代理（Railway 和其他雲端平台使用代理）
+// 這對於正確處理 X-Forwarded-For header 很重要
+app.set('trust proxy', true);
+
 // 中間件
 app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' })); // 限制請求體大小
