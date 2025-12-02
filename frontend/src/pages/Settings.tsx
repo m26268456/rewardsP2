@@ -49,7 +49,7 @@ export default function Settings() {
               { id: 'query', label: '回饋查詢' },
               { id: 'calculate', label: '回饋計算' },
               { id: 'transactions', label: '記帳功能' },
-              { id: 'quota', label: '額度查詢' },
+              { id: 'quota', label: '額度管理' },
               { id: 'app', label: '應用程式設定' },
             ].map((tab) => (
               <button
@@ -138,6 +138,11 @@ function SchemeDetailManager({
           <div className="text-xs text-gray-500 mt-1">
             {scheme.requires_switch ? '需切換' : '免切換'}
           </div>
+          {(scheme as any).shared_reward_group_id && (
+            <div className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded mt-1 inline-block">
+              🔗 共用回饋：{(scheme as any).shared_reward_group_name || '載入中...'}
+            </div>
+          )}
         </div>
         <div className="flex gap-1 flex-shrink-0 flex-wrap">
           <button
@@ -257,6 +262,7 @@ function CardItem({
     activityStartDate: '',
     activityEndDate: '',
     displayOrder: 0,
+    sharedRewardGroupId: '', // 共同回饋綁定（指向同卡片中的另一個方案ID）
   });
 
   // 用於追蹤表單和展開區域的 ref
@@ -271,10 +277,9 @@ function CardItem({
         if (showSchemeForm || editingScheme) {
           setShowSchemeForm(false);
           setEditingScheme(null);
-          setChannelApplicationsText('');
-          setChannelExclusionsText('');
-          setRewards([]);
-        }
+        setChannelApplicationsText('');
+        setChannelExclusionsText('');
+      }
         if (expandedSchemeId) {
           setExpandedSchemeId(null);
         }
@@ -297,7 +302,6 @@ function CardItem({
         setEditingScheme(null);
         setChannelApplicationsText('');
         setChannelExclusionsText('');
-        setRewards([]);
       }
       
       // 如果點擊在展開的方案外部，關閉展開
@@ -365,9 +369,9 @@ function CardItem({
       activityStartDate: '',
       activityEndDate: '',
       displayOrder: schemes.length > 0 ? Math.max(...schemes.map(s => s.display_order ?? 0)) + 1 : 0,
+      sharedRewardGroupId: '',
     });
-    // 清空回饋組成、適用通路、排除通路
-    setRewards([]);
+    // 清空適用通路、排除通路
     setChannelApplicationsText('');
     setChannelExclusionsText('');
     setShowSchemeForm(true);
@@ -390,23 +394,12 @@ function CardItem({
       activityStartDate: scheme.activity_start_date ? scheme.activity_start_date.split('T')[0] : '',
       activityEndDate: scheme.activity_end_date ? scheme.activity_end_date.split('T')[0] : '',
       displayOrder: scheme.display_order ?? 0,
+      sharedRewardGroupId: (scheme as any).shared_reward_group_id || '',
     });
-    // 載入方案的詳細資訊（回饋組成、適用通路、排除通路）
+    // 載入方案的詳細資訊（適用通路、排除通路）
     try {
       const res = await api.get(`/schemes/${scheme.id}/details`);
       const data = res.data.data;
-      // 載入回饋組成
-      setRewards(
-        data.rewards.map((r: any) => ({
-          percentage: parseFloat(r.reward_percentage) || 0,
-          calculationMethod: r.calculation_method || 'round',
-          quotaLimit: r.quota_limit ? parseFloat(r.quota_limit) : null,
-          quotaRefreshType: r.quota_refresh_type || null,
-          quotaRefreshValue: r.quota_refresh_value || null,
-          quotaRefreshDate: r.quota_refresh_date ? r.quota_refresh_date.split('T')[0] : null,
-          displayOrder: r.display_order || 0,
-        }))
-      );
       // 載入適用通路（轉換為文字，每行一個通路名稱）
       setChannelApplicationsText(
         data.applications.map((app: { name: string; note?: string }) => 
@@ -420,7 +413,6 @@ function CardItem({
     } catch (error) {
       console.error('載入方案詳細錯誤:', error);
       // 如果載入失敗，至少清空這些資料
-      setRewards([]);
       setChannelApplicationsText('');
       setChannelExclusionsText('');
     }
@@ -509,8 +501,12 @@ function CardItem({
     return applications;
   };
 
+  const [isSaving, setIsSaving] = useState(false);
+
   const handleSchemeSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (isSaving) return; // 防止重複提交
+    setIsSaving(true);
     try {
       // 轉換通路文字為ID
       const applications = await convertApplicationTextToIds(channelApplicationsText);
@@ -525,20 +521,12 @@ function CardItem({
           activityStartDate: schemeFormData.activityStartDate || null,
           activityEndDate: schemeFormData.activityEndDate || null,
           displayOrder: schemeFormData.displayOrder,
+          sharedRewardGroupId: schemeFormData.sharedRewardGroupId || null,
           applications: applications.map(app => ({
             channelId: app.channelId,
             note: app.note || null,
           })),
           exclusions: exclusions,
-          rewards: rewards.map((r, idx) => ({
-            percentage: r.percentage,
-            calculationMethod: r.calculationMethod,
-            quotaLimit: r.quotaLimit,
-            quotaRefreshType: r.quotaRefreshType,
-            quotaRefreshValue: r.quotaRefreshValue,
-            quotaRefreshDate: r.quotaRefreshDate,
-            displayOrder: idx,
-          })),
         });
         alert('方案已更新');
         setEditingScheme(null);
@@ -552,15 +540,7 @@ function CardItem({
           activityStartDate: schemeFormData.activityStartDate || null,
           activityEndDate: schemeFormData.activityEndDate || null,
           displayOrder: schemeFormData.displayOrder,
-          rewards: rewards.map((r, idx) => ({
-            percentage: r.percentage,
-            calculationMethod: r.calculationMethod,
-            quotaLimit: r.quotaLimit,
-            quotaRefreshType: r.quotaRefreshType,
-            quotaRefreshValue: r.quotaRefreshValue,
-            quotaRefreshDate: r.quotaRefreshDate,
-            displayOrder: idx,
-          })),
+          sharedRewardGroupId: schemeFormData.sharedRewardGroupId || null,
         });
         // 新增後也需要設定通路
         const res = await api.get(`/schemes/card/${card.id}`);
@@ -581,32 +561,14 @@ function CardItem({
       setExpandedSchemeId(null);
       setChannelApplicationsText('');
       setChannelExclusionsText('');
-      setRewards([]);
       loadSchemes();
       onReload();
     } catch (error: unknown) {
       const err = error as { response?: { data?: { error?: string } } };
       alert(err.response?.data?.error || '操作失敗');
+    } finally {
+      setIsSaving(false);
     }
-  };
-
-  const addReward = () => {
-    setRewards([
-      ...rewards,
-      {
-        percentage: 0,
-        calculationMethod: 'round',
-        quotaLimit: null,
-        quotaRefreshType: null,
-        quotaRefreshValue: null,
-        quotaRefreshDate: null,
-        displayOrder: rewards.length,
-      },
-    ]);
-  };
-
-  const removeReward = (index: number) => {
-    setRewards(rewards.filter((_, i) => i !== index));
   };
 
   return (
@@ -734,135 +696,6 @@ function CardItem({
                     className="w-full px-2 py-1 border rounded text-sm"
                   />
                 </div>
-                {/* 回饋組成 */}
-                <div>
-                  <label className="block text-xs text-gray-600 mb-1">回饋組成</label>
-                  <div className="space-y-2">
-                    {rewards.map((reward, index) => (
-                      <div key={index} className="p-2 border rounded space-y-2">
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="text-xs block mb-1">回饋%數</label>
-                            <input
-                              type="number"
-                              step="0.1"
-                              value={reward.percentage}
-                              onChange={(e) => {
-                                const newRewards = [...rewards];
-                                newRewards[index].percentage = parseFloat(e.target.value) || 0;
-                                setRewards(newRewards);
-                              }}
-                              className="w-full px-2 py-1 border rounded text-xs"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-xs block mb-1">計算方式</label>
-                            <select
-                              value={reward.calculationMethod}
-                              onChange={(e) => {
-                                const newRewards = [...rewards];
-                                newRewards[index].calculationMethod = e.target.value;
-                                setRewards(newRewards);
-                              }}
-                              className="w-full px-2 py-1 border rounded text-xs"
-                            >
-                              <option value="round">四捨五入</option>
-                              <option value="floor">無條件捨去</option>
-                              <option value="ceil">無條件進位</option>
-                            </select>
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="text-xs block mb-1">額度上限（留空為無上限）</label>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={reward.quotaLimit || ''}
-                              onChange={(e) => {
-                                const newRewards = [...rewards];
-                                newRewards[index].quotaLimit = e.target.value ? parseFloat(e.target.value) : null;
-                                setRewards(newRewards);
-                              }}
-                              className="w-full px-2 py-1 border rounded text-xs"
-                              placeholder="無上限"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-xs block mb-1">刷新類型</label>
-                            <select
-                              value={reward.quotaRefreshType || ''}
-                              onChange={(e) => {
-                                const newRewards = [...rewards];
-                                newRewards[index].quotaRefreshType = e.target.value || null;
-                                if (e.target.value !== 'date') {
-                                  newRewards[index].quotaRefreshDate = null;
-                                }
-                                setRewards(newRewards);
-                              }}
-                              className="w-full px-2 py-1 border rounded text-xs"
-                            >
-                              <option value="">不刷新</option>
-                              <option value="monthly">每月固定日期</option>
-                              <option value="date">指定日期</option>
-                              <option value="activity">活動結束日</option>
-                            </select>
-                          </div>
-                        </div>
-                        {(reward.quotaRefreshType === 'monthly' || reward.quotaRefreshType === 'date') && (
-                          <div className="grid grid-cols-2 gap-2">
-                            {reward.quotaRefreshType === 'monthly' && (
-                              <div>
-                                <label className="text-xs block mb-1">每月幾號（1-31）</label>
-                                <input
-                                  type="number"
-                                  min="1"
-                                  max="31"
-                                  value={reward.quotaRefreshValue || ''}
-                                  onChange={(e) => {
-                                    const newRewards = [...rewards];
-                                    newRewards[index].quotaRefreshValue = e.target.value ? parseInt(e.target.value) : null;
-                                    setRewards(newRewards);
-                                  }}
-                                  className="w-full px-2 py-1 border rounded text-xs"
-                                />
-                              </div>
-                            )}
-                            {reward.quotaRefreshType === 'date' && (
-                              <div>
-                                <label className="text-xs block mb-1">刷新日期</label>
-                                <input
-                                  type="date"
-                                  value={reward.quotaRefreshDate || ''}
-                                  onChange={(e) => {
-                                    const newRewards = [...rewards];
-                                    newRewards[index].quotaRefreshDate = e.target.value || null;
-                                    setRewards(newRewards);
-                                  }}
-                                  className="w-full px-2 py-1 border rounded text-xs"
-                                />
-                              </div>
-                            )}
-                          </div>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => removeReward(index)}
-                          className="px-2 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600"
-                        >
-                          刪除
-                        </button>
-                      </div>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={addReward}
-                      className="px-2 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600"
-                    >
-                      新增回饋組成
-                    </button>
-                  </div>
-                </div>
                 {/* 方案期限 */}
                 <div className="grid grid-cols-2 gap-2">
                   <div>
@@ -883,6 +716,32 @@ function CardItem({
                       className="w-full px-2 py-1 border rounded text-sm"
                     />
                   </div>
+                </div>
+                {/* 共同回饋綁定 */}
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">
+                    共同回饋綁定
+                    <span className="text-gray-400 text-[10px] ml-1">（選擇同卡片中已設定回饋的方案，將共用該方案的回饋組成）</span>
+                  </label>
+                  <select
+                    value={schemeFormData.sharedRewardGroupId}
+                    onChange={(e) => setSchemeFormData({ ...schemeFormData, sharedRewardGroupId: e.target.value })}
+                    className="w-full px-2 py-1 border rounded text-sm"
+                  >
+                    <option value="">不使用（使用自己的回饋組成）</option>
+                    {schemes
+                      .filter(s => !editingScheme || s.id !== editingScheme.id) // 排除自己
+                      .map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}
+                        </option>
+                      ))}
+                  </select>
+                  {schemeFormData.sharedRewardGroupId && (
+                    <div className="mt-1 text-xs text-blue-600 bg-blue-50 p-2 rounded">
+                      💡 此方案將與「{schemes.find(s => s.id === schemeFormData.sharedRewardGroupId)?.name}」共用回饋組成
+                    </div>
+                  )}
                 </div>
                 {/* 適用通路 */}
                 <div>
@@ -919,13 +778,14 @@ function CardItem({
                   />
                   <label htmlFor="requiresSwitch" className="text-xs text-gray-600">需切換</label>
                 </div>
-                <div className="flex gap-2">
-                  <button
-                    type="submit"
-                    className="px-3 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600"
-                  >
-                    {editingScheme ? '更新' : '新增'}
-                  </button>
+                          <div className="flex gap-2">
+                            <button
+                              type="submit"
+                              disabled={isSaving}
+                              className="px-3 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {isSaving ? '儲存中...' : (editingScheme ? '更新' : '新增')}
+                            </button>
                   <button
                     type="button"
                     onClick={() => {
@@ -933,7 +793,6 @@ function CardItem({
                       setEditingScheme(null);
                       setChannelApplicationsText('');
                       setChannelExclusionsText('');
-                      setRewards([]);
                     }}
                     className="px-3 py-1 bg-gray-500 text-white rounded text-xs hover:bg-gray-600"
                   >
@@ -1005,135 +864,6 @@ function CardItem({
                               className="w-full px-2 py-1 border rounded text-sm"
                             />
                           </div>
-                          {/* 回饋組成 */}
-                          <div>
-                            <label className="block text-xs text-gray-600 mb-1">回饋組成</label>
-                            <div className="space-y-2">
-                              {rewards.map((reward, rewardIndex) => (
-                                <div key={rewardIndex} className="p-2 border rounded space-y-2">
-                                  <div className="grid grid-cols-2 gap-2">
-                                    <div>
-                                      <label className="text-xs block mb-1">回饋%數</label>
-                                      <input
-                                        type="number"
-                                        step="0.1"
-                                        value={reward.percentage}
-                                        onChange={(e) => {
-                                          const newRewards = [...rewards];
-                                          newRewards[rewardIndex].percentage = parseFloat(e.target.value) || 0;
-                                          setRewards(newRewards);
-                                        }}
-                                        className="w-full px-2 py-1 border rounded text-xs"
-                                      />
-                                    </div>
-                                    <div>
-                                      <label className="text-xs block mb-1">計算方式</label>
-                                      <select
-                                        value={reward.calculationMethod}
-                                        onChange={(e) => {
-                                          const newRewards = [...rewards];
-                                          newRewards[rewardIndex].calculationMethod = e.target.value;
-                                          setRewards(newRewards);
-                                        }}
-                                        className="w-full px-2 py-1 border rounded text-xs"
-                                      >
-                                        <option value="round">四捨五入</option>
-                                        <option value="floor">無條件捨去</option>
-                                        <option value="ceil">無條件進位</option>
-                                      </select>
-                                    </div>
-                                  </div>
-                                  <div className="grid grid-cols-2 gap-2">
-                                    <div>
-                                      <label className="text-xs block mb-1">額度上限（留空為無上限）</label>
-                                      <input
-                                        type="number"
-                                        step="0.01"
-                                        value={reward.quotaLimit || ''}
-                                        onChange={(e) => {
-                                          const newRewards = [...rewards];
-                                          newRewards[rewardIndex].quotaLimit = e.target.value ? parseFloat(e.target.value) : null;
-                                          setRewards(newRewards);
-                                        }}
-                                        className="w-full px-2 py-1 border rounded text-xs"
-                                        placeholder="無上限"
-                                      />
-                                    </div>
-                                    <div>
-                                      <label className="text-xs block mb-1">刷新類型</label>
-                                      <select
-                                        value={reward.quotaRefreshType || ''}
-                                        onChange={(e) => {
-                                          const newRewards = [...rewards];
-                                          newRewards[rewardIndex].quotaRefreshType = e.target.value || null;
-                                          if (e.target.value !== 'date') {
-                                            newRewards[rewardIndex].quotaRefreshDate = null;
-                                          }
-                                          setRewards(newRewards);
-                                        }}
-                                        className="w-full px-2 py-1 border rounded text-xs"
-                                      >
-                                        <option value="">不刷新</option>
-                                        <option value="monthly">每月固定日期</option>
-                                        <option value="date">指定日期</option>
-                                        <option value="activity">活動結束日</option>
-                                      </select>
-                                    </div>
-                                  </div>
-                                  {(reward.quotaRefreshType === 'monthly' || reward.quotaRefreshType === 'date') && (
-                                    <div className="grid grid-cols-2 gap-2">
-                                      {reward.quotaRefreshType === 'monthly' && (
-                                        <div>
-                                          <label className="text-xs block mb-1">每月幾號（1-31）</label>
-                                          <input
-                                            type="number"
-                                            min="1"
-                                            max="31"
-                                            value={reward.quotaRefreshValue || ''}
-                                            onChange={(e) => {
-                                              const newRewards = [...rewards];
-                                              newRewards[rewardIndex].quotaRefreshValue = e.target.value ? parseInt(e.target.value) : null;
-                                              setRewards(newRewards);
-                                            }}
-                                            className="w-full px-2 py-1 border rounded text-xs"
-                                          />
-                                        </div>
-                                      )}
-                                      {reward.quotaRefreshType === 'date' && (
-                                        <div>
-                                          <label className="text-xs block mb-1">刷新日期</label>
-                                          <input
-                                            type="date"
-                                            value={reward.quotaRefreshDate || ''}
-                                            onChange={(e) => {
-                                              const newRewards = [...rewards];
-                                              newRewards[rewardIndex].quotaRefreshDate = e.target.value || null;
-                                              setRewards(newRewards);
-                                            }}
-                                            className="w-full px-2 py-1 border rounded text-xs"
-                                          />
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
-                                  <button
-                                    type="button"
-                                    onClick={() => removeReward(rewardIndex)}
-                                    className="px-2 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600"
-                                  >
-                                    刪除
-                                  </button>
-                                </div>
-                              ))}
-                              <button
-                                type="button"
-                                onClick={addReward}
-                                className="px-2 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600"
-                              >
-                                新增回饋組成
-                              </button>
-                            </div>
-                          </div>
                           {/* 方案期限 */}
                           <div className="grid grid-cols-2 gap-2">
                             <div>
@@ -1154,6 +884,32 @@ function CardItem({
                                 className="w-full px-2 py-1 border rounded text-sm"
                               />
                             </div>
+                          </div>
+                          {/* 共同回饋綁定 */}
+                          <div>
+                            <label className="block text-xs text-gray-600 mb-1">
+                              共同回饋綁定
+                              <span className="text-gray-400 text-[10px] ml-1">（選擇同卡片中已設定回饋的方案，將共用該方案的回饋組成）</span>
+                            </label>
+                            <select
+                              value={schemeFormData.sharedRewardGroupId}
+                              onChange={(e) => setSchemeFormData({ ...schemeFormData, sharedRewardGroupId: e.target.value })}
+                              className="w-full px-2 py-1 border rounded text-sm"
+                            >
+                              <option value="">不使用（使用自己的回饋組成）</option>
+                              {schemes
+                                .filter(s => s.id !== editingScheme.id) // 排除自己
+                                .map((s) => (
+                                  <option key={s.id} value={s.id}>
+                                    {s.name}
+                                  </option>
+                                ))}
+                            </select>
+                            {schemeFormData.sharedRewardGroupId && (
+                              <div className="mt-1 text-xs text-blue-600 bg-blue-50 p-2 rounded">
+                                💡 此方案將與「{schemes.find(s => s.id === schemeFormData.sharedRewardGroupId)?.name}」共用回饋組成
+                              </div>
+                            )}
                           </div>
                           {/* 適用通路 */}
                           <div>
@@ -1193,9 +949,10 @@ function CardItem({
                           <div className="flex gap-2">
                             <button
                               type="submit"
-                              className="px-3 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600"
+                              disabled={isSaving}
+                              className="px-3 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                              更新
+                              {isSaving ? '儲存中...' : '更新'}
                             </button>
                             <button
                               type="button"
@@ -1204,7 +961,6 @@ function CardItem({
                                 setEditingScheme(null);
                                 setChannelApplicationsText('');
                                 setChannelExclusionsText('');
-                                setRewards([]);
                               }}
                               className="px-3 py-1 bg-gray-500 text-white rounded text-xs hover:bg-gray-600"
                             >
@@ -1472,7 +1228,11 @@ function PaymentMethodItem({
     return applications;
   };
 
+  const [isSavingChannels, setIsSavingChannels] = useState(false);
+
   const handleSaveChannels = async () => {
+    if (isSavingChannels) return;
+    setIsSavingChannels(true);
     try {
       // 轉換通路文字為ID
       const applications = await convertApplicationTextToIds(channelApplicationsText);
@@ -1488,6 +1248,8 @@ function PaymentMethodItem({
     } catch (error: unknown) {
       const err = error as { response?: { data?: { error?: string } } };
       alert(err.response?.data?.error || '更新失敗');
+    } finally {
+      setIsSavingChannels(false);
     }
   };
 
@@ -1573,7 +1335,11 @@ function PaymentMethodItem({
     setRewards(rewards.filter((_, i) => i !== index));
   };
 
+  const [isSavingRewards, setIsSavingRewards] = useState(false);
+
   const handleSaveRewards = async () => {
+    if (isSavingRewards) return;
+    setIsSavingRewards(true);
     try {
       await api.put(`/payment-methods/${paymentMethod.id}/rewards`, {
         rewards: rewards.map((r, idx) => ({
@@ -1593,6 +1359,8 @@ function PaymentMethodItem({
     } catch (error: unknown) {
       const err = error as { response?: { data?: { error?: string } } };
       alert(err.response?.data?.error || '更新失敗');
+    } finally {
+      setIsSavingRewards(false);
     }
   };
 
@@ -1678,9 +1446,10 @@ function PaymentMethodItem({
                 <div className="flex gap-2">
                   <button
                     onClick={handleSaveChannels}
-                    className="px-2 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600"
+                    disabled={isSavingChannels}
+                    className="px-2 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    儲存
+                    {isSavingChannels ? '儲存中...' : '儲存'}
                   </button>
                   <button
                     onClick={() => {
@@ -1777,20 +1546,57 @@ function PaymentMethodItem({
                       </div>
                       <div>
                         <label className="text-xs font-medium block mb-1">刷新類型</label>
-                        <select
-                          value={reward.quotaRefreshType || ''}
-                          onChange={(e) => {
-                            const newRewards = [...rewards];
-                            newRewards[index].quotaRefreshType = e.target.value || null;
-                            setRewards(newRewards);
-                          }}
-                          className="w-full px-2 py-1 border rounded text-xs"
-                        >
-                          <option value="">無</option>
-                          <option value="monthly">每月</option>
-                          <option value="date">指定日期</option>
-                          <option value="activity">活動期間</option>
-                        </select>
+                        <div className="space-y-1">
+                          <label className="flex items-center gap-2 text-xs">
+                            <input
+                              type="radio"
+                              name={`refreshType-payment-${index}`}
+                              value=""
+                              checked={!reward.quotaRefreshType}
+                              onChange={(e) => {
+                                const newRewards = [...rewards];
+                                newRewards[index].quotaRefreshType = null;
+                                newRewards[index].quotaRefreshValue = null;
+                                newRewards[index].quotaRefreshDate = null;
+                                setRewards(newRewards);
+                              }}
+                              className="w-3 h-3"
+                            />
+                            <span>不刷新</span>
+                          </label>
+                          <label className="flex items-center gap-2 text-xs">
+                            <input
+                              type="radio"
+                              name={`refreshType-payment-${index}`}
+                              value="monthly"
+                              checked={reward.quotaRefreshType === 'monthly'}
+                              onChange={(e) => {
+                                const newRewards = [...rewards];
+                                newRewards[index].quotaRefreshType = 'monthly';
+                                newRewards[index].quotaRefreshDate = null;
+                                setRewards(newRewards);
+                              }}
+                              className="w-3 h-3"
+                            />
+                            <span>每月固定日期</span>
+                          </label>
+                          <label className="flex items-center gap-2 text-xs">
+                            <input
+                              type="radio"
+                              name={`refreshType-payment-${index}`}
+                              value="date"
+                              checked={reward.quotaRefreshType === 'date'}
+                              onChange={(e) => {
+                                const newRewards = [...rewards];
+                                newRewards[index].quotaRefreshType = 'date';
+                                newRewards[index].quotaRefreshValue = null;
+                                setRewards(newRewards);
+                              }}
+                              className="w-3 h-3"
+                            />
+                            <span>指定日期</span>
+                          </label>
+                        </div>
                       </div>
                       {reward.quotaRefreshType === 'monthly' && (
                         <div>
@@ -1847,9 +1653,10 @@ function PaymentMethodItem({
               {rewards.length > 0 && (
                 <button
                   onClick={handleSaveRewards}
-                  className="px-2 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600"
+                  disabled={isSavingRewards}
+                  className="px-2 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  儲存
+                  {isSavingRewards ? '儲存中...' : '儲存'}
                 </button>
               )}
             </div>
@@ -2041,7 +1848,9 @@ function QuerySettings() {
     const data = {
       name: formData.get('name'),
       note: formData.get('note') || null,
-      displayOrder: parseInt(formData.get('displayOrder') as string) || 0,
+      displayOrder: editingCard 
+        ? parseInt(formData.get('displayOrder') as string) || 0
+        : (cards.length > 0 ? Math.max(...cards.map(c => c.display_order ?? 0)) + 1 : 0),
     };
 
     try {
@@ -2121,7 +1930,9 @@ function QuerySettings() {
     const data = {
       name: formData.get('name'),
       note: formData.get('note') || null,
-      displayOrder: parseInt(formData.get('displayOrder') as string) || 0,
+      displayOrder: editingPayment
+        ? parseInt(formData.get('displayOrder') as string) || 0
+        : (paymentMethods.length > 0 ? Math.max(...paymentMethods.map(p => p.display_order ?? 0)) + 1 : 0),
     };
 
     try {
@@ -2201,7 +2012,9 @@ function QuerySettings() {
     const data = {
       name: formData.get('name'),
       isCommon: true, // 常用通路
-      displayOrder: parseInt(formData.get('displayOrder') as string) || 0,
+      displayOrder: editingChannel
+        ? parseInt(formData.get('displayOrder') as string) || 0
+        : (channels.length > 0 ? Math.max(...channels.map(c => c.display_order ?? 0)) + 1 : 0),
     };
 
     try {
@@ -4051,7 +3864,7 @@ function TransactionSettings() {
   );
 }
 
-// 額度查詢設定
+// 額度管理設定
 function QuotaSettings() {
   const [quotas, setQuotas] = useState<Array<{
     schemeId: string | null;
@@ -4236,7 +4049,7 @@ function QuotaSettings() {
 
   return (
     <div className="space-y-6">
-      <h3 className="text-lg font-semibold">額度查詢設定</h3>
+      <h3 className="text-lg font-semibold">額度管理設定</h3>
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto" style={{ maxHeight: 'calc(100vh - 250px)' }}>

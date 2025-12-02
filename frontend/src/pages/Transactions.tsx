@@ -204,12 +204,12 @@ export default function Transactions() {
             {reasonString && (
               <div className="mb-2 p-2 bg-blue-50 rounded text-sm whitespace-pre-wrap">{reasonString}</div>
             )}
-            <textarea
+            <input
+              type="text"
               value={formData.reason}
               onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
               required
-              rows={3}
-              placeholder="可輸入多行文字，按 Enter 換行"
+              placeholder="輸入事由"
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
