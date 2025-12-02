@@ -269,7 +269,7 @@ router.put('/:id/batch', async (req: Request, res: Response) => {
       const schemeResult = await client.query(
         `UPDATE card_schemes
          SET name = $1, note = $2, requires_switch = $3, 
-             activity_start_date = $4, activity_end_date = $5, display_order = $6,
+             activity_start_date = $4::date, activity_end_date = $5::date, display_order = $6,
              shared_reward_group_id = $7,
              updated_at = CURRENT_TIMESTAMP
          WHERE id = $8
@@ -295,33 +295,36 @@ router.put('/:id/batch', async (req: Request, res: Response) => {
       // 刪除現有的適用通路
       await client.query('DELETE FROM scheme_channel_applications WHERE scheme_id = $1', [id]);
 
-      // 批量插入適用通路（使用 UNNEST 優化）
+      // 批量插入適用通路（使用 UNNEST 優化，確保類型正確）
       if (applications && Array.isArray(applications) && applications.length > 0) {
         const validApps = applications.filter((app: any) => app && app.channelId);
         if (validApps.length > 0) {
-          // 使用 UNNEST 進行批量插入
+          // 使用 UNNEST 進行批量插入，明確指定所有類型
           const channelIds = validApps.map((app: any) => app.channelId);
           const notes = validApps.map((app: any) => (app.note ? String(app.note) : null));
           
-          await client.query(
-            `INSERT INTO scheme_channel_applications (scheme_id, channel_id, note)
-             SELECT $1, unnest($2::uuid[]), unnest($3::text[])
-             ON CONFLICT (scheme_id, channel_id) DO UPDATE SET note = EXCLUDED.note`,
-            [id, channelIds, notes]
-          );
+          // 確保陣列不為空且長度一致
+          if (channelIds.length > 0 && channelIds.length === notes.length) {
+            await client.query(
+              `INSERT INTO scheme_channel_applications (scheme_id, channel_id, note)
+               SELECT $1::uuid, unnest($2::uuid[]), unnest($3::text[])
+               ON CONFLICT (scheme_id, channel_id) DO UPDATE SET note = EXCLUDED.note`,
+              [id, channelIds, notes]
+            );
+          }
         }
       }
 
       // 刪除現有的排除通路
       await client.query('DELETE FROM scheme_channel_exclusions WHERE scheme_id = $1', [id]);
 
-      // 批量插入排除通路（優化：使用 UNNEST）
+      // 批量插入排除通路（使用 UNNEST 優化，確保類型正確）
       if (exclusions && Array.isArray(exclusions) && exclusions.length > 0) {
         const validExclusions = exclusions.filter((channelId: any) => channelId && typeof channelId === 'string');
         if (validExclusions.length > 0) {
           await client.query(
             `INSERT INTO scheme_channel_exclusions (scheme_id, channel_id)
-             SELECT $1, unnest($2::uuid[])
+             SELECT $1::uuid, unnest($2::uuid[])
              ON CONFLICT (scheme_id, channel_id) DO NOTHING`,
             [id, validExclusions]
           );
@@ -441,34 +444,36 @@ router.put('/:id/channels', async (req: Request, res: Response) => {
       // 刪除現有的適用通路
       await client.query('DELETE FROM scheme_channel_applications WHERE scheme_id = $1', [id]);
 
-      // 批量插入適用通路（優化：使用批量插入）
+      // 批量插入適用通路（使用 UNNEST 優化，確保類型正確）
       if (Array.isArray(applications) && applications.length > 0) {
-        const validApps = applications.filter((app: any) => app.channelId);
+        const validApps = applications.filter((app: any) => app && app.channelId);
         if (validApps.length > 0) {
-          // 使用 UNNEST 進行批量插入
+          // 使用 UNNEST 進行批量插入，明確指定所有類型
           const channelIds = validApps.map((app: any) => app.channelId);
           const notes = validApps.map((app: any) => (app.note ? String(app.note) : null));
           
-          await client.query(
-            `INSERT INTO scheme_channel_applications (scheme_id, channel_id, note)
-             SELECT $1, unnest($2::uuid[]), unnest($3::text[])
-             ON CONFLICT (scheme_id, channel_id) DO UPDATE SET note = EXCLUDED.note`,
-            [id, channelIds, notes]
-          );
+          // 確保陣列不為空且長度一致
+          if (channelIds.length > 0 && channelIds.length === notes.length) {
+            await client.query(
+              `INSERT INTO scheme_channel_applications (scheme_id, channel_id, note)
+               SELECT $1::uuid, unnest($2::uuid[]), unnest($3::text[])
+               ON CONFLICT (scheme_id, channel_id) DO UPDATE SET note = EXCLUDED.note`,
+              [id, channelIds, notes]
+            );
+          }
         }
       }
 
       // 刪除現有的排除通路
       await client.query('DELETE FROM scheme_channel_exclusions WHERE scheme_id = $1', [id]);
 
-      // 批量插入排除通路（優化：使用批量插入）
+      // 批量插入排除通路（使用 UNNEST 優化，確保類型正確）
       if (Array.isArray(exclusions) && exclusions.length > 0) {
-        const validExclusions = exclusions.filter((channelId: string) => channelId);
+        const validExclusions = exclusions.filter((channelId: any) => channelId && typeof channelId === 'string');
         if (validExclusions.length > 0) {
-          // 使用 UNNEST 進行批量插入
           await client.query(
             `INSERT INTO scheme_channel_exclusions (scheme_id, channel_id)
-             SELECT $1, unnest($2::uuid[])
+             SELECT $1::uuid, unnest($2::uuid[])
              ON CONFLICT (scheme_id, channel_id) DO NOTHING`,
             [id, validExclusions]
           );
