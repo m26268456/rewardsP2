@@ -298,13 +298,35 @@ router.put('/:id/batch', async (req: Request, res: Response) => {
       // 批量插入適用通路
       if (applications && Array.isArray(applications) && applications.length > 0) {
         const validApps = applications.filter((app: any) => app && app.channelId);
-        for (const app of validApps) {
-          await client.query(
-            `INSERT INTO scheme_channel_applications (scheme_id, channel_id, note)
-             VALUES ($1::uuid, $2::uuid, $3::text)
-             ON CONFLICT (scheme_id, channel_id) DO UPDATE SET note = EXCLUDED.note`,
-            [id, app.channelId, app.note || null]
-          );
+        console.log(`[批量更新方案] 準備插入 ${validApps.length} 個適用通路`);
+        for (let i = 0; i < validApps.length; i++) {
+          const app = validApps[i];
+          try {
+            const params = [id, app.channelId, app.note || null];
+            console.log(`[批量更新方案] 插入適用通路 ${i + 1}/${validApps.length}:`, {
+              schemeId: id,
+              channelId: app.channelId,
+              note: app.note || null,
+              noteType: typeof (app.note || null),
+            });
+            await client.query(
+              `INSERT INTO scheme_channel_applications (scheme_id, channel_id, note)
+               VALUES ($1::uuid, $2::uuid, $3::text)
+               ON CONFLICT (scheme_id, channel_id) DO UPDATE SET note = EXCLUDED.note`,
+              params
+            );
+          } catch (insertError) {
+            console.error(`[批量更新方案] 插入適用通路失敗 (第 ${i + 1} 個):`, {
+              error: insertError,
+              errorMessage: (insertError as Error).message,
+              errorStack: (insertError as Error).stack,
+              app: app,
+              schemeId: id,
+              channelId: app.channelId,
+              note: app.note || null,
+            });
+            throw insertError;
+          }
         }
       }
 
@@ -314,13 +336,31 @@ router.put('/:id/batch', async (req: Request, res: Response) => {
       // 批量插入排除通路
       if (exclusions && Array.isArray(exclusions) && exclusions.length > 0) {
         const validExclusions = exclusions.filter((channelId: any) => channelId && typeof channelId === 'string');
-        for (const channelId of validExclusions) {
-          await client.query(
-            `INSERT INTO scheme_channel_exclusions (scheme_id, channel_id)
-             VALUES ($1::uuid, $2::uuid)
-             ON CONFLICT (scheme_id, channel_id) DO NOTHING`,
-            [id, channelId]
-          );
+        console.log(`[批量更新方案] 準備插入 ${validExclusions.length} 個排除通路`);
+        for (let i = 0; i < validExclusions.length; i++) {
+          const channelId = validExclusions[i];
+          try {
+            console.log(`[批量更新方案] 插入排除通路 ${i + 1}/${validExclusions.length}:`, {
+              schemeId: id,
+              channelId: channelId,
+              channelIdType: typeof channelId,
+            });
+            await client.query(
+              `INSERT INTO scheme_channel_exclusions (scheme_id, channel_id)
+               VALUES ($1::uuid, $2::uuid)
+               ON CONFLICT (scheme_id, channel_id) DO NOTHING`,
+              [id, channelId]
+            );
+          } catch (insertError) {
+            console.error(`[批量更新方案] 插入排除通路失敗 (第 ${i + 1} 個):`, {
+              error: insertError,
+              errorMessage: (insertError as Error).message,
+              errorStack: (insertError as Error).stack,
+              schemeId: id,
+              channelId: channelId,
+            });
+            throw insertError;
+          }
         }
       }
 
@@ -331,14 +371,38 @@ router.put('/:id/batch', async (req: Request, res: Response) => {
       res.json({ success: true, message: '方案已更新' });
     } catch (error) {
       await client.query('ROLLBACK');
-      console.error('批量更新方案錯誤:', error);
+      const err = error as Error;
+      console.error('[批量更新方案] 事務錯誤:', {
+        error: err,
+        message: err.message,
+        stack: err.stack,
+        schemeId: req.params.id,
+        body: JSON.stringify(req.body, null, 2),
+      });
       throw error;
     } finally {
       client.release();
     }
   } catch (error) {
-    console.error('批量更新方案錯誤:', error);
-    res.status(500).json({ success: false, error: (error as Error).message });
+    const err = error as Error;
+    console.error('[批量更新方案] 外部錯誤:', {
+      error: err,
+      message: err.message,
+      stack: err.stack,
+      schemeId: req.params.id,
+      body: JSON.stringify(req.body, null, 2),
+    });
+    res.status(500).json({
+      success: false,
+      error: err.message,
+      details: {
+        schemeId: req.params.id,
+        errorType: err.constructor.name,
+        errorMessage: err.message,
+        // 只在開發環境顯示 stack
+        ...(process.env.NODE_ENV !== 'production' && { stack: err.stack }),
+      },
+    });
   }
 });
 
@@ -440,13 +504,30 @@ router.put('/:id/channels', async (req: Request, res: Response) => {
       // 批量插入適用通路
       if (Array.isArray(applications) && applications.length > 0) {
         const validApps = applications.filter((app: any) => app && app.channelId);
-        for (const app of validApps) {
-          await client.query(
-            `INSERT INTO scheme_channel_applications (scheme_id, channel_id, note)
-             VALUES ($1::uuid, $2::uuid, $3::text)
-             ON CONFLICT (scheme_id, channel_id) DO UPDATE SET note = EXCLUDED.note`,
-            [id, app.channelId, app.note || null]
-          );
+        console.log(`[更新方案通路] 準備插入 ${validApps.length} 個適用通路`);
+        for (let i = 0; i < validApps.length; i++) {
+          const app = validApps[i];
+          try {
+            const params = [id, app.channelId, app.note || null];
+            console.log(`[更新方案通路] 插入適用通路 ${i + 1}/${validApps.length}:`, {
+              schemeId: id,
+              channelId: app.channelId,
+              note: app.note || null,
+            });
+            await client.query(
+              `INSERT INTO scheme_channel_applications (scheme_id, channel_id, note)
+               VALUES ($1::uuid, $2::uuid, $3::text)
+               ON CONFLICT (scheme_id, channel_id) DO UPDATE SET note = EXCLUDED.note`,
+              params
+            );
+          } catch (insertError) {
+            console.error(`[更新方案通路] 插入適用通路失敗 (第 ${i + 1} 個):`, {
+              error: insertError,
+              errorMessage: (insertError as Error).message,
+              app: app,
+            });
+            throw insertError;
+          }
         }
       }
 
@@ -456,13 +537,28 @@ router.put('/:id/channels', async (req: Request, res: Response) => {
       // 批量插入排除通路
       if (Array.isArray(exclusions) && exclusions.length > 0) {
         const validExclusions = exclusions.filter((channelId: any) => channelId && typeof channelId === 'string');
-        for (const channelId of validExclusions) {
-          await client.query(
-            `INSERT INTO scheme_channel_exclusions (scheme_id, channel_id)
-             VALUES ($1::uuid, $2::uuid)
-             ON CONFLICT (scheme_id, channel_id) DO NOTHING`,
-            [id, channelId]
-          );
+        console.log(`[更新方案通路] 準備插入 ${validExclusions.length} 個排除通路`);
+        for (let i = 0; i < validExclusions.length; i++) {
+          const channelId = validExclusions[i];
+          try {
+            console.log(`[更新方案通路] 插入排除通路 ${i + 1}/${validExclusions.length}:`, {
+              schemeId: id,
+              channelId: channelId,
+            });
+            await client.query(
+              `INSERT INTO scheme_channel_exclusions (scheme_id, channel_id)
+               VALUES ($1::uuid, $2::uuid)
+               ON CONFLICT (scheme_id, channel_id) DO NOTHING`,
+              [id, channelId]
+            );
+          } catch (insertError) {
+            console.error(`[更新方案通路] 插入排除通路失敗 (第 ${i + 1} 個):`, {
+              error: insertError,
+              errorMessage: (insertError as Error).message,
+              channelId: channelId,
+            });
+            throw insertError;
+          }
         }
       }
 
@@ -470,12 +566,37 @@ router.put('/:id/channels', async (req: Request, res: Response) => {
       res.json({ success: true, message: '通路設定已更新' });
     } catch (error) {
       await client.query('ROLLBACK');
+      const err = error as Error;
+      console.error('[更新方案通路] 事務錯誤:', {
+        error: err,
+        message: err.message,
+        stack: err.stack,
+        schemeId: req.params.id,
+      });
       throw error;
     } finally {
       client.release();
     }
   } catch (error) {
-    res.status(500).json({ success: false, error: (error as Error).message });
+    const err = error as Error;
+    console.error('[更新方案通路] 外部錯誤:', {
+      error: err,
+      message: err.message,
+      stack: err.stack,
+      schemeId: req.params.id,
+      body: JSON.stringify(req.body, null, 2),
+    });
+    res.status(500).json({
+      success: false,
+      error: err.message,
+      details: {
+        schemeId: req.params.id,
+        errorType: err.constructor.name,
+        errorMessage: err.message,
+        // 只在開發環境顯示 stack
+        ...(process.env.NODE_ENV !== 'production' && { stack: err.stack }),
+      },
+    });
   }
 });
 
