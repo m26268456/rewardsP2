@@ -306,11 +306,18 @@ router.put('/:id/batch', async (req: Request, res: Response) => {
           
           // 確保陣列不為空且長度一致
           if (channelIds.length > 0 && channelIds.length === notes.length) {
-            // 使用 CAST 確保類型正確，避免 node-postgres 自動轉換為 VALUES
-            const queryText = `INSERT INTO scheme_channel_applications (scheme_id, channel_id, note)
-                              SELECT $1::uuid, unnest(CAST($2 AS uuid[])), NULLIF(unnest(CAST($3 AS text[])), '')::text
-                              ON CONFLICT (scheme_id, channel_id) DO UPDATE SET note = EXCLUDED.note`;
-            await client.query(queryText, [id, channelIds, notes]);
+            // 使用逐個插入，串行執行以避免 node-postgres 自動合併查詢
+            // 雖然串行執行，但對於數十到數百個通路，性能仍然可接受
+            for (const app of validApps) {
+              const noteValue = app.note ? String(app.note) : null;
+              // 明確指定每個參數的類型，避免類型推斷問題
+              await client.query(
+                `INSERT INTO scheme_channel_applications (scheme_id, channel_id, note)
+                 VALUES ($1::uuid, $2::uuid, COALESCE($3::text, NULL))
+                 ON CONFLICT (scheme_id, channel_id) DO UPDATE SET note = EXCLUDED.note`,
+                [id, app.channelId, noteValue]
+              );
+            }
           }
         }
       }
@@ -318,15 +325,19 @@ router.put('/:id/batch', async (req: Request, res: Response) => {
       // 刪除現有的排除通路
       await client.query('DELETE FROM scheme_channel_exclusions WHERE scheme_id = $1', [id]);
 
-      // 批量插入排除通路（使用 UNNEST 優化，確保類型正確）
+      // 批量插入排除通路（使用並行插入確保類型正確）
       if (exclusions && Array.isArray(exclusions) && exclusions.length > 0) {
         const validExclusions = exclusions.filter((channelId: any) => channelId && typeof channelId === 'string');
         if (validExclusions.length > 0) {
-          // 使用 CAST 確保類型正確，避免 node-postgres 自動轉換為 VALUES
-          const queryText = `INSERT INTO scheme_channel_exclusions (scheme_id, channel_id)
-                            SELECT $1::uuid, unnest(CAST($2 AS uuid[]))
-                            ON CONFLICT (scheme_id, channel_id) DO NOTHING`;
-          await client.query(queryText, [id, validExclusions]);
+          // 使用逐個插入，串行執行以避免 node-postgres 自動合併查詢
+          for (const channelId of validExclusions) {
+            await client.query(
+              `INSERT INTO scheme_channel_exclusions (scheme_id, channel_id)
+               VALUES ($1::uuid, $2::uuid)
+               ON CONFLICT (scheme_id, channel_id) DO NOTHING`,
+              [id, channelId]
+            );
+          }
         }
       }
 
@@ -454,11 +465,18 @@ router.put('/:id/channels', async (req: Request, res: Response) => {
           
           // 確保陣列不為空且長度一致
           if (channelIds.length > 0 && channelIds.length === notes.length) {
-            // 使用 CAST 確保類型正確，避免 node-postgres 自動轉換為 VALUES
-            const queryText = `INSERT INTO scheme_channel_applications (scheme_id, channel_id, note)
-                              SELECT $1::uuid, unnest(CAST($2 AS uuid[])), NULLIF(unnest(CAST($3 AS text[])), '')::text
-                              ON CONFLICT (scheme_id, channel_id) DO UPDATE SET note = EXCLUDED.note`;
-            await client.query(queryText, [id, channelIds, notes]);
+            // 使用逐個插入，串行執行以避免 node-postgres 自動合併查詢
+            // 雖然串行執行，但對於數十到數百個通路，性能仍然可接受
+            for (const app of validApps) {
+              const noteValue = app.note ? String(app.note) : null;
+              // 明確指定每個參數的類型，避免類型推斷問題
+              await client.query(
+                `INSERT INTO scheme_channel_applications (scheme_id, channel_id, note)
+                 VALUES ($1::uuid, $2::uuid, COALESCE($3::text, NULL))
+                 ON CONFLICT (scheme_id, channel_id) DO UPDATE SET note = EXCLUDED.note`,
+                [id, app.channelId, noteValue]
+              );
+            }
           }
         }
       }
@@ -466,15 +484,19 @@ router.put('/:id/channels', async (req: Request, res: Response) => {
       // 刪除現有的排除通路
       await client.query('DELETE FROM scheme_channel_exclusions WHERE scheme_id = $1', [id]);
 
-      // 批量插入排除通路（使用 UNNEST 優化，確保類型正確）
+      // 批量插入排除通路（使用並行插入確保類型正確）
       if (Array.isArray(exclusions) && exclusions.length > 0) {
         const validExclusions = exclusions.filter((channelId: any) => channelId && typeof channelId === 'string');
         if (validExclusions.length > 0) {
-          // 使用 CAST 確保類型正確，避免 node-postgres 自動轉換為 VALUES
-          const queryText = `INSERT INTO scheme_channel_exclusions (scheme_id, channel_id)
-                            SELECT $1::uuid, unnest(CAST($2 AS uuid[]))
-                            ON CONFLICT (scheme_id, channel_id) DO NOTHING`;
-          await client.query(queryText, [id, validExclusions]);
+          // 使用逐個插入，串行執行以避免 node-postgres 自動合併查詢
+          for (const channelId of validExclusions) {
+            await client.query(
+              `INSERT INTO scheme_channel_exclusions (scheme_id, channel_id)
+               VALUES ($1::uuid, $2::uuid)
+               ON CONFLICT (scheme_id, channel_id) DO NOTHING`,
+              [id, channelId]
+            );
+          }
         }
       }
 
