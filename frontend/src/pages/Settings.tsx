@@ -859,8 +859,6 @@ function CardItem({
                               />
                             </div>
                           </div>
-                          {/* 共同回饋綁定 */}
-                          <div>
                           {/* 適用通路 */}
                           <div>
                             <label className="block text-xs text-gray-600 mb-1">
