@@ -2,7 +2,7 @@
  * 基礎 Repository 類別
  * 提供通用的資料庫操作方法
  */
-import { Pool, PoolClient, QueryResult } from 'pg';
+import { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
 
 export abstract class BaseRepository {
   constructor(protected pool: Pool) {}
@@ -10,7 +10,7 @@ export abstract class BaseRepository {
   /**
    * 執行查詢
    */
-  protected async query<T = any>(
+  protected async query<T extends QueryResultRow = any>(
     text: string,
     params?: any[]
   ): Promise<QueryResult<T>> {
