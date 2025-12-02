@@ -25,8 +25,12 @@ export const apiLimiter = rateLimit({
     if (forwarded) {
       // X-Forwarded-For 可能包含多個 IP，取第一個
       const ips = Array.isArray(forwarded) ? forwarded[0] : forwarded;
-      return ips.split(',')[0].trim() || req.ip;
+      const firstIp = ips.split(',')[0].trim();
+      if (firstIp) {
+        return firstIp;
+      }
     }
+    // 確保總是返回一個字符串
     return req.ip || req.socket.remoteAddress || 'unknown';
   },
 });
