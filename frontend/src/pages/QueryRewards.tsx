@@ -41,6 +41,15 @@ interface QueryResult {
     requiresSwitch: boolean;
     note?: string;
     activityEndDate?: string;
+    rewards?: Array<{
+      percentage: number;
+      method: string;
+      quotaLimit: number | null;
+      usedQuota: number;
+      quotaRefreshType: string | null;
+      quotaRefreshValue: number | null;
+      quotaRefreshDate: string | null;
+    }>;
   }>;
 }
 
@@ -207,6 +216,89 @@ export default function QueryRewards() {
     setSelectedPaymentInfo(null);
     setSelectedChannelNames(new Map());
     setLastAction('query');
+  };
+
+  // Helper function to determine reward status
+  const getRewardStatus = (item: QueryResult['results'][0]) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Normalize today's date
+
+    let isSchemeExpired = false;
+    if (item.activityEndDate) {
+      const endDate = new Date(item.activityEndDate);
+      endDate.setHours(23, 59, 59, 999); // Normalize end date to end of day
+      isSchemeExpired = endDate < today;
+    }
+
+    const rewardStatuses: string[] = [];
+    let hasOverLimit = false;
+    let hasExpiredReward = false;
+
+    item.rewards?.forEach(reward => {
+      // Check for expired individual reward (if it has a specific refresh date)
+      let isRewardExpired = false;
+      if (reward.quotaRefreshType === 'date' && reward.quotaRefreshDate) {
+        const refreshDate = new Date(reward.quotaRefreshDate);
+        refreshDate.setHours(23, 59, 59, 999);
+        isRewardExpired = refreshDate < today;
+      } else if (reward.quotaRefreshType === 'monthly' && reward.quotaRefreshValue) {
+        // For monthly, check if the current month has passed the refresh day
+        const currentDay = today.getDate();
+        if (currentDay > reward.quotaRefreshValue) {
+          // If today's day is past the refresh day, it means the quota for this month has passed its refresh point
+          // This logic might need refinement based on exact "expired" definition for monthly quotas
+          // For now, we'll consider it "active" until the next refresh cycle
+        }
+      }
+
+      // Check for over limit
+      const isOverLimit = reward.quotaLimit !== null && reward.usedQuota > reward.quotaLimit;
+
+      if (isOverLimit) {
+        rewardStatuses.push(`${reward.percentage}% 已超額`);
+        hasOverLimit = true;
+      }
+      if (isRewardExpired) {
+        rewardStatuses.push(`${reward.percentage}% 已逾期`);
+        hasExpiredReward = true;
+      }
+    });
+
+    // Combine scheme expiration with individual reward statuses
+    if (isSchemeExpired) {
+      rewardStatuses.push('方案已逾期');
+      hasExpiredReward = true;
+    }
+
+    const hasAnyWarning = rewardStatuses.length > 0;
+    const isMultipleWarnings = rewardStatuses.length > 1;
+    const isSingleWarning = rewardStatuses.length === 1;
+
+    let bgColor = '';
+    let borderColor = '';
+    let textColor = '';
+
+    if (hasOverLimit || hasExpiredReward) {
+      if (isMultipleWarnings) {
+        bgColor = 'bg-red-50';
+        borderColor = 'border-red-500';
+        textColor = 'text-red-700';
+      } else if (isSingleWarning) {
+        bgColor = 'bg-yellow-50';
+        borderColor = 'border-yellow-500';
+        textColor = 'text-yellow-700';
+      }
+    }
+
+    return {
+      hasAnyWarning,
+      isMultipleWarnings,
+      isSingleWarning,
+      rewardStatuses,
+      bgColor,
+      borderColor,
+      textColor,
+    };
   };
 
   // 點擊卡片顯示該卡片的所有方案
@@ -443,34 +535,97 @@ export default function QueryRewards() {
               <>
                 <h3 className="text-lg font-semibold mb-4 text-green-800">查詢結果</h3>
                 <div className="space-y-4">
-                  {queryResults.map((result) => (
-                    <div key={result.channelId} className="border rounded p-4 bg-white">
-                      <h4 className="font-semibold mb-2 text-lg">{result.channelName}</h4>
-                      <div className="space-y-2">
-                        {result.results.map((item, idx) => (
-                          <div
-                            key={idx}
-                            className={`p-3 rounded-lg ${
-                              item.isExcluded ? 'bg-red-50 border-l-4 border-red-500' : 'bg-green-50 border-l-4 border-green-500'
-                            }`}
-                          >
-                            {item.isExcluded ? (
-                              <div className="text-sm">
-                                <span className="badge-danger font-medium">X排除</span>{' '}
-                                <span className="font-semibold">{item.excludedSchemeName}</span>{' '}
-                                <span className="badge-warning">{item.requiresSwitch ? '需切換' : '免切換'}</span>{' '}
-                                <span className="text-gray-700">{result.channelName}</span>
+                  {queryResults.map((result) => {
+                    // Filter results into conforming and non-conforming
+                    const conformingResults: QueryResult['results'] = [];
+                    const nonConformingResults: QueryResult['results'] = [];
+
+                    result.results.forEach(item => {
+                      if (item.isExcluded) {
+                        nonConformingResults.push(item); // Excluded items are always non-conforming
+                        return;
+                      }
+                      const { hasAnyWarning } = getRewardStatus(item);
+                      if (hasAnyWarning) {
+                        nonConformingResults.push(item);
+                      } else {
+                        conformingResults.push(item);
+                      }
+                    });
+
+                    return (
+                      <div key={result.channelId} className="border rounded p-4 bg-white">
+                        <h4 className="font-semibold mb-2 text-lg">{result.channelName}</h4>
+                        <div className="space-y-2">
+                          {conformingResults.map((item, idx) => {
+                            const { hasAnyWarning, isMultipleWarnings, rewardStatuses, bgColor, borderColor, textColor } = getRewardStatus(item);
+                            return (
+                              <div
+                                key={idx}
+                                className={`p-3 rounded-lg ${
+                                  hasAnyWarning
+                                    ? `${bgColor} border-l-4 ${borderColor}`
+                                    : 'bg-green-50 border-l-4 border-green-500'
+                                }`}
+                              >
+                                <div className="text-sm">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-2xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
+                                      {item.totalRewardPercentage}%
+                                    </span>{' '}
+                                    <span className="font-semibold text-gray-800">{item.schemeInfo}</span>{' '}
+                                    <span className={`badge ${item.requiresSwitch ? 'badge-warning' : 'badge-success'}`}>
+                                      {item.requiresSwitch ? '需切換' : '免切換'}
+                                    </span>{' '}
+                                    {hasAnyWarning && (
+                                      <span className={`${textColor} text-xs font-semibold`}>
+                                        ⚠️ {rewardStatuses.join('、')}
+                                      </span>
+                                    )}
+                                    <span className="text-gray-700">{result.channelName}</span>
+                                  </div>
+                                  {item.note && (
+                                    <div className="mt-1 text-xs text-gray-600 bg-white/50 px-2 py-1 rounded">
+                                      💡 {item.note}
+                                    </div>
+                                  )}
+                                  {item.rewardBreakdown && (
+                                    <div className="mt-1 text-xs text-gray-500">
+                                      📊 組成：{item.rewardBreakdown}
+                                    </div>
+                                  )}
+                                </div>
                               </div>
-                            ) : (
-                              <div className="text-sm">
-                                {(() => {
-                                  // 檢查方案是否已逾期
-                                  const isExpired = item.activityEndDate 
-                                    ? new Date(item.activityEndDate) < new Date()
-                                    : false;
-                                  
+                            );
+                          })}
+                        </div>
+                        {nonConformingResults.length > 0 && (
+                          <div className="mt-4 pt-4 border-t border-gray-200">
+                            <h5 className="font-semibold text-sm text-gray-700 mb-2">排除不符合回饋的結果</h5>
+                            <div className="space-y-2">
+                              {nonConformingResults.map((item, idx) => {
+                                if (item.isExcluded) {
                                   return (
-                                    <div className={isExpired ? 'bg-yellow-50 border-l-4 border-yellow-500 p-2 rounded' : ''}>
+                                    <div
+                                      key={idx}
+                                      className="p-3 rounded-lg bg-red-50 border-l-4 border-red-500"
+                                    >
+                                      <div className="text-sm">
+                                        <span className="badge-danger font-medium">X排除</span>{' '}
+                                        <span className="font-semibold">{item.excludedSchemeName}</span>{' '}
+                                        <span className="badge-warning">{item.requiresSwitch ? '需切換' : '免切換'}</span>{' '}
+                                        <span className="text-gray-700">{result.channelName}</span>
+                                      </div>
+                                    </div>
+                                  );
+                                }
+                                const { rewardStatuses, bgColor, borderColor, textColor } = getRewardStatus(item);
+                                return (
+                                  <div
+                                    key={idx}
+                                    className={`p-3 rounded-lg ${bgColor} border-l-4 ${borderColor}`}
+                                  >
+                                    <div className="text-sm">
                                       <div className="flex items-center gap-2 flex-wrap">
                                         <span className="text-2xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
                                           {item.totalRewardPercentage}%
@@ -479,18 +634,14 @@ export default function QueryRewards() {
                                         <span className={`badge ${item.requiresSwitch ? 'badge-warning' : 'badge-success'}`}>
                                           {item.requiresSwitch ? '需切換' : '免切換'}
                                         </span>{' '}
-                                        {isExpired && (
-                                          <span className="badge-danger text-xs font-semibold">
-                                            ⚠️ 方案已逾期
-                                          </span>
-                                        )}
+                                        <span className={`${textColor} text-xs font-semibold`}>
+                                          ⚠️ {rewardStatuses.join('、')}
+                                        </span>
                                         <span className="text-gray-700">{result.channelName}</span>
                                       </div>
-                                      {isExpired && item.activityEndDate && (
-                                        <div className="mt-1 text-xs text-yellow-700">
-                                          活動結束日期：{new Date(item.activityEndDate).toLocaleDateString('zh-TW')}
-                                        </div>
-                                      )}
+                                      <div className="mt-1 text-xs text-gray-600 bg-white/50 px-2 py-1 rounded">
+                                        ⚠️ 此結果不符合回饋條件
+                                      </div>
                                       {item.note && (
                                         <div className="mt-1 text-xs text-gray-600 bg-white/50 px-2 py-1 rounded">
                                           💡 {item.note}
@@ -502,15 +653,15 @@ export default function QueryRewards() {
                                         </div>
                                       )}
                                     </div>
-                                  );
-                                })()}
-                              </div>
-                            )}
+                                  </div>
+                                );
+                              })}
+                            </div>
                           </div>
-                        ))}
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </>
             )}
@@ -641,6 +792,9 @@ export default function QueryRewards() {
                           </div>
                           <div className="text-sm mb-2">
                             <span className="font-medium">回饋組成：</span>
+                            {/* The totalRewardPercentage for payment_scheme should only be the scheme's percentage, not "credit card scheme" + "payment method" percentage.
+                                The backend already sends scheme_rewards and payment_rewards separately.
+                                The frontend should only use scheme_rewards for total percentage here. */}
                             {scheme.rewards.map((r, idx: number) => (
                               <span key={idx}>
                                 {r.percentage}%

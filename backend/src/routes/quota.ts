@@ -17,6 +17,7 @@ router.get('/', async (req: Request, res: Response) => {
          c.name || '-' || cs.name as name,
          c.name as card_name,
          cs.name as scheme_name,
+         srgm.root_scheme_id as shared_reward_group_id,
          sr.id as reward_id,
          sr.reward_percentage,
          sr.calculation_method,
@@ -33,6 +34,7 @@ router.get('/', async (req: Request, res: Response) => {
        FROM card_schemes cs
        INNER JOIN cards c ON cs.card_id = c.id
        INNER JOIN scheme_rewards sr ON cs.id = sr.scheme_id
+       LEFT JOIN shared_reward_group_members srgm ON srgm.scheme_id = cs.id
        LEFT JOIN quota_trackings qt ON cs.id = qt.scheme_id 
          AND sr.id = qt.reward_id 
          AND qt.payment_method_id IS NULL
@@ -155,6 +157,7 @@ router.get('/', async (req: Request, res: Response) => {
          c.name || '-' || cs.name as name,
          c.name as card_name,
          cs.name as scheme_name,
+         srgm.root_scheme_id as shared_reward_group_id,
          sr.id as reward_id,
          sr.reward_percentage,
          sr.calculation_method,
@@ -170,6 +173,7 @@ router.get('/', async (req: Request, res: Response) => {
        FROM card_schemes cs
        INNER JOIN cards c ON cs.card_id = c.id
        INNER JOIN scheme_rewards sr ON cs.id = sr.scheme_id
+       LEFT JOIN shared_reward_group_members srgm ON srgm.scheme_id = cs.id
        LEFT JOIN quota_trackings qt ON cs.id = qt.scheme_id 
          AND sr.id = qt.reward_id 
          AND qt.payment_method_id IS NULL
@@ -215,6 +219,7 @@ router.get('/', async (req: Request, res: Response) => {
       cardName: string | null;
       paymentMethodName: string | null;
       schemeName: string | null;
+      sharedRewardGroupId: string | null;
       rewards: Array<{
         percentage: number;
         rewardId: string;
@@ -263,6 +268,7 @@ router.get('/', async (req: Request, res: Response) => {
           cardName: row.card_name || null,
           paymentMethodName: row.payment_method_name || null,
           schemeName: row.scheme_name || null,
+          sharedRewardGroupId: row.shared_reward_group_id || null,
           rewards: [],
         });
       }
@@ -390,6 +396,7 @@ router.get('/', async (req: Request, res: Response) => {
       cardName: string | null;
       paymentMethodName: string | null;
       schemeName: string | null;
+      sharedRewardGroupId: string | null;
       rewardComposition: string;
       calculationMethods: string[];
       quotaLimits: Array<number | null>;
@@ -419,6 +426,7 @@ router.get('/', async (req: Request, res: Response) => {
           cardName: quota.cardName,
           paymentMethodName: null,
           schemeName: quota.schemeName,
+          sharedRewardGroupId: quota.sharedRewardGroupId,
           rewardComposition: quota.rewards.map(r => `${r.percentage}%`).join('/'),
           calculationMethods: quota.rewards.map(r => r.calculationMethod),
           quotaLimits: quota.rewards.map(r => r.quotaLimit),
@@ -449,6 +457,7 @@ router.get('/', async (req: Request, res: Response) => {
           cardName: quota.cardName,
           paymentMethodName: quota.paymentMethodName,
           schemeName: quota.schemeName,
+          sharedRewardGroupId: null,
           rewardComposition: quota.rewards.map(r => `${r.percentage}%`).join('/'),
           calculationMethods: quota.rewards.map(r => r.calculationMethod),
           quotaLimits: quota.rewards.map(r => r.quotaLimit),
@@ -462,6 +471,44 @@ router.get('/', async (req: Request, res: Response) => {
           quotaRefreshValues: quota.rewards.map(r => r.quotaRefreshValue),
           quotaRefreshDates: quota.rewards.map(r => r.quotaRefreshDate),
         });
+      }
+    });
+
+    const existingSchemeIds = new Set(result.filter(r => r.schemeId).map(r => r.schemeId as string));
+    const allSchemes = await pool.query(
+      `SELECT cs.id, cs.name, srgm.root_scheme_id as shared_reward_group_id, c.id as card_id, c.name as card_name
+       FROM card_schemes cs
+       INNER JOIN cards c ON cs.card_id = c.id
+       LEFT JOIN shared_reward_group_members srgm ON srgm.scheme_id = cs.id
+       WHERE cs.card_id IS NOT NULL
+       ORDER BY c.display_order, cs.display_order`
+    );
+    allSchemes.rows.forEach((row) => {
+      if (!existingSchemeIds.has(row.id)) {
+        result.push({
+          schemeId: row.id,
+          paymentMethodId: null,
+          name: `${row.card_name}-${row.name}`,
+          cardId: row.card_id,
+          paymentMethodIdForGroup: null,
+          cardName: row.card_name,
+          paymentMethodName: null,
+          schemeName: row.name,
+          sharedRewardGroupId: row.shared_reward_group_id || null,
+          rewardComposition: '',
+          calculationMethods: [],
+          quotaLimits: [],
+          currentAmounts: [],
+          usedQuotas: [],
+          remainingQuotas: [],
+          referenceAmounts: [],
+          refreshTimes: [],
+          rewardIds: [],
+          quotaRefreshTypes: [],
+          quotaRefreshValues: [],
+          quotaRefreshDates: [],
+        });
+        existingSchemeIds.add(row.id);
       }
     });
 

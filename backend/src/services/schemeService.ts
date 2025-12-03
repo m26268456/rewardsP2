@@ -211,6 +211,16 @@ export async function queryChannelRewardsByKeywords(
       schemeInfo: string;
       requiresSwitch: boolean;
       note?: string;
+      activityEndDate?: string;
+      rewards?: Array<{
+        percentage: number;
+        method: string;
+        quotaLimit: number | null;
+        usedQuota: number;
+        quotaRefreshType: string | null;
+        quotaRefreshValue: number | null;
+        quotaRefreshDate: string | null;
+      }>;
     }>;
   }>
 > {
@@ -306,6 +316,16 @@ export async function queryChannelRewards(
       schemeInfo: string;
       requiresSwitch: boolean;
       note?: string;
+      activityEndDate?: string;
+      rewards?: Array<{
+        percentage: number;
+        method: string;
+        quotaLimit: number | null;
+        usedQuota: number;
+        quotaRefreshType: string | null;
+        quotaRefreshValue: number | null;
+        quotaRefreshDate: string | null;
+      }>;
     }>;
   }>
 > {
@@ -342,11 +362,17 @@ export async function queryChannelRewards(
         `SELECT cs.id, cs.name, cs.requires_switch, cs.activity_end_date, c.name as card_name, sca.note,
                 (SELECT json_agg(
                   json_build_object(
-                    'percentage', reward_percentage,
-                    'method', calculation_method
-                  ) ORDER BY display_order
+                    'percentage', sr.reward_percentage,
+                    'method', sr.calculation_method,
+                    'quotaLimit', sr.quota_limit,
+                    'usedQuota', COALESCE(qt.used_quota, 0),
+                    'quotaRefreshType', sr.quota_refresh_type,
+                    'quotaRefreshValue', sr.quota_refresh_value,
+                    'quotaRefreshDate', sr.quota_refresh_date
+                  ) ORDER BY sr.display_order
                 )
                 FROM scheme_rewards sr
+                LEFT JOIN quota_trackings qt ON sr.id = qt.reward_id AND qt.scheme_id = sr.scheme_id AND qt.payment_method_id IS NULL
                 WHERE sr.scheme_id = cs.id) as rewards
          FROM scheme_channel_applications sca
          JOIN card_schemes cs ON sca.scheme_id = cs.id
@@ -361,11 +387,17 @@ export async function queryChannelRewards(
         `SELECT pm.id, pm.name, pca.note,
                 (SELECT json_agg(
                   json_build_object(
-                    'percentage', reward_percentage,
-                    'method', calculation_method
-                  ) ORDER BY display_order
+                    'percentage', pr.reward_percentage,
+                    'method', pr.calculation_method,
+                    'quotaLimit', pr.quota_limit,
+                    'usedQuota', COALESCE(qt.used_quota, 0),
+                    'quotaRefreshType', pr.quota_refresh_type,
+                    'quotaRefreshValue', pr.quota_refresh_value,
+                    'quotaRefreshDate', pr.quota_refresh_date
+                  ) ORDER BY pr.display_order
                 )
                 FROM payment_rewards pr
+                LEFT JOIN quota_trackings qt ON pr.id = qt.payment_reward_id AND qt.payment_method_id = pr.payment_method_id AND qt.scheme_id IS NULL
                 WHERE pr.payment_method_id = pm.id) as rewards
          FROM payment_channel_applications pca
          JOIN payment_methods pm ON pca.payment_method_id = pm.id
@@ -379,19 +411,31 @@ export async function queryChannelRewards(
                 pm.name as payment_name, pm.id as payment_id, pca.note,
                 (SELECT json_agg(
                   json_build_object(
-                    'percentage', reward_percentage,
-                    'method', calculation_method
-                  ) ORDER BY display_order
+                    'percentage', sr.reward_percentage,
+                    'method', sr.calculation_method,
+                    'quotaLimit', sr.quota_limit,
+                    'usedQuota', COALESCE(qt.used_quota, 0),
+                    'quotaRefreshType', sr.quota_refresh_type,
+                    'quotaRefreshValue', sr.quota_refresh_value,
+                    'quotaRefreshDate', sr.quota_refresh_date
+                  ) ORDER BY sr.display_order
                 )
                 FROM scheme_rewards sr
+                LEFT JOIN quota_trackings qt ON sr.id = qt.reward_id AND qt.scheme_id = sr.scheme_id AND qt.payment_method_id IS NULL
                 WHERE sr.scheme_id = cs.id) as scheme_rewards,
                 (SELECT json_agg(
                   json_build_object(
-                    'percentage', reward_percentage,
-                    'method', calculation_method
-                  ) ORDER BY display_order
+                    'percentage', pr.reward_percentage,
+                    'method', pr.calculation_method,
+                    'quotaLimit', pr.quota_limit,
+                    'usedQuota', COALESCE(qt.used_quota, 0),
+                    'quotaRefreshType', pr.quota_refresh_type,
+                    'quotaRefreshValue', pr.quota_refresh_value,
+                    'quotaRefreshDate', pr.quota_refresh_date
+                  ) ORDER BY pr.display_order
                 )
                 FROM payment_rewards pr
+                LEFT JOIN quota_trackings qt ON pr.id = qt.payment_reward_id AND qt.payment_method_id = pr.payment_method_id AND qt.scheme_id IS NULL
                 WHERE pr.payment_method_id = pm.id) as payment_rewards
          FROM payment_scheme_links psl
          JOIN card_schemes cs ON psl.scheme_id = cs.id
@@ -422,6 +466,7 @@ export async function queryChannelRewards(
           requiresSwitch: row.requires_switch,
           note: row.note || undefined,
           activityEndDate: row.activity_end_date || undefined,
+          rewards: rewards, // Add full reward details for frontend processing
         };
       });
 
@@ -442,6 +487,7 @@ export async function queryChannelRewards(
           schemeInfo: row.name,
           requiresSwitch: false,
           note: row.note || undefined,
+          rewards: rewards, // Add full reward details for frontend processing
         };
       });
 
@@ -449,16 +495,17 @@ export async function queryChannelRewards(
         const schemeRewards = row.scheme_rewards || [];
         const paymentRewards = row.payment_rewards || [];
         
+        // User requested: The percentage used should be the "credit card scheme" percentage, not "credit card scheme" + "payment method" percentage.
         const schemeTotal = schemeRewards.reduce(
           (sum: number, r: any) => sum + parseFloat(r.percentage),
           0
         );
-        const paymentTotal = paymentRewards.reduce(
-          (sum: number, r: any) => sum + parseFloat(r.percentage),
-          0
-        );
+        // const paymentTotal = paymentRewards.reduce(
+        //   (sum: number, r: any) => sum + parseFloat(r.percentage),
+        //   0
+        // );
         
-        const totalPercentage = schemeTotal + paymentTotal;
+        const totalPercentage = schemeTotal; // Only scheme total as per user request
         
         const schemeBreakdown = schemeRewards.map((r: any) => `${r.percentage}%`).join('+');
         const paymentBreakdown = paymentRewards.map((r: any) => `${r.percentage}%`).join('+');
@@ -474,6 +521,7 @@ export async function queryChannelRewards(
           requiresSwitch: row.requires_switch,
           note: row.note || undefined,
           activityEndDate: row.activity_end_date || undefined,
+          rewards: schemeRewards, // Only scheme rewards for frontend processing
         };
       });
 
