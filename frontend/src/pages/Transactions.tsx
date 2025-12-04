@@ -3,6 +3,7 @@ import { format } from 'date-fns';
 import { utcToZonedTime, format as formatTz } from 'date-fns-tz';
 import api from '../utils/api';
 import * as XLSX from 'xlsx';
+import { isApp } from '../utils/isApp';
 
 // 時區設定：UTC+8 (Asia/Taipei)
 const TIMEZONE = 'Asia/Taipei';
@@ -306,31 +307,31 @@ export default function Transactions() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
+          <table className={`min-w-full divide-y divide-gray-200 ${isApp() ? 'text-xs' : ''}`}>
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap`}>
                   時間戳記
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap`}>
                   日期
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-medium text-gray-500 uppercase`}>
                   事由
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap`}>
                   金額
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap`}>
                   類型
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap`}>
                   使用方案
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-medium text-gray-500 uppercase`}>
                   備註
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap`}>
                   操作
                 </th>
               </tr>
@@ -338,22 +339,22 @@ export default function Transactions() {
             <tbody className="bg-white divide-y divide-gray-200">
               {transactions.map((transaction) => (
                 <tr key={transaction.id}>
-                  <td className="px-4 py-3 text-sm">
+                  <td className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm whitespace-nowrap`}>
                     {formatTz(utcToZonedTime(new Date(transaction.created_at), TIMEZONE), 'yyyy/MM/dd HH:mm:ss', { timeZone: TIMEZONE })}
                   </td>
-                  <td className="px-4 py-3 text-sm">
+                  <td className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm whitespace-nowrap`}>
                     {transaction.transaction_date 
                       ? formatTz(utcToZonedTime(new Date(transaction.transaction_date), TIMEZONE), 'yyyy/MM/dd', { timeZone: TIMEZONE })
                       : '-'}
                   </td>
-                  <td className="px-4 py-3 text-sm whitespace-pre-wrap">{transaction.reason}</td>
-                  <td className="px-4 py-3 text-sm">
+                  <td className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm whitespace-pre-wrap break-words`}>{transaction.reason}</td>
+                  <td className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm whitespace-nowrap`}>
                     {transaction.amount ? transaction.amount.toLocaleString() : '-'}
                   </td>
-                  <td className="px-4 py-3 text-sm">{transaction.type_name}</td>
-                  <td className="px-4 py-3 text-sm">{transaction.scheme_name || '-'}</td>
-                  <td className="px-4 py-3 text-sm whitespace-pre-wrap">{transaction.note || '-'}</td>
-                  <td className="px-4 py-3 text-sm">
+                  <td className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm whitespace-nowrap`}>{transaction.type_name}</td>
+                  <td className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm whitespace-nowrap`}>{transaction.scheme_name || '-'}</td>
+                  <td className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm whitespace-pre-wrap break-words`}>{transaction.note || '-'}</td>
+                  <td className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm whitespace-nowrap`}>
                     <button
                       onClick={() => handleDelete(transaction.id)}
                       className="text-red-600 hover:text-red-800"

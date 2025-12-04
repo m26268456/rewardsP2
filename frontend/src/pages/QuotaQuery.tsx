@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import api from '../utils/api';
+import { isApp } from '../utils/isApp';
 
 interface QuotaInfo {
   schemeId: string | null;
@@ -14,26 +15,13 @@ interface QuotaInfo {
   referenceAmounts: Array<number | null>;
   refreshTimes: string[];
   rewardIds: string[];
-  quotaRefreshTypes?: Array<string | null>;
-  quotaRefreshValues?: Array<number | null>;
-  quotaRefreshDates?: Array<string | null>;
+  quotaCalculationModes?: Array<'per_transaction' | 'total_amount'>;
   cardId?: string | null;
   paymentMethodIdForGroup?: string | null;
   cardName?: string | null;
   paymentMethodName?: string | null;
   schemeName?: string | null;
-  sharedRewardGroupId?: string | null;
-  __index?: number;
-  [key: string]: unknown;
 }
-
-const bindingPalette = [
-  { rowBg: 'bg-green-50', border: 'border-green-200', badgeBg: 'bg-green-200', badgeText: 'text-green-900' },
-  { rowBg: 'bg-yellow-50', border: 'border-yellow-200', badgeBg: 'bg-yellow-200', badgeText: 'text-yellow-900' },
-  { rowBg: 'bg-purple-50', border: 'border-purple-200', badgeBg: 'bg-purple-200', badgeText: 'text-purple-900' },
-  { rowBg: 'bg-pink-50', border: 'border-pink-200', badgeBg: 'bg-pink-200', badgeText: 'text-pink-900' },
-  { rowBg: 'bg-teal-50', border: 'border-teal-200', badgeBg: 'bg-teal-200', badgeText: 'text-teal-900' },
-];
 
 export default function QuotaQuery() {
   const [quotas, setQuotas] = useState<QuotaInfo[]>([]);
@@ -43,6 +31,7 @@ export default function QuotaQuery() {
 
   useEffect(() => {
     loadQuotas();
+    // 每分鐘重新載入一次（檢查是否需要刷新）
     const interval = setInterval(loadQuotas, 60000);
     return () => clearInterval(interval);
   }, []);
@@ -51,88 +40,79 @@ export default function QuotaQuery() {
     try {
       setLoading(true);
       const res = await api.get('/quota');
-      if (!res.data?.success || !Array.isArray(res.data.data)) {
-        setQuotas([]);
-        return;
-      }
-
-      const processed = res.data.data.map((quota: QuotaInfo & { shared_reward_group_id?: string | null }, index: number) => {
-        if (!quota.schemeId && quota.paymentMethodId) {
-          if (
-            (!quota.rewardIds || quota.rewardIds.length === 0 || quota.rewardIds.every(id => !id || id.trim() === '')) &&
-            quota.rewardComposition?.trim()
-          ) {
-            const count = quota.rewardComposition.split('/').length;
-            quota.rewardIds = Array(count).fill('');
+      if (res.data && res.data.success && Array.isArray(res.data.data)) {
+        // 處理支付方式：如果 rewardIds 都是空值，但 rewardComposition 有值，則創建對應的 rewardIds
+        const processedData = res.data.data.map((quota: QuotaInfo) => {
+          // 如果是支付方式且 rewardIds 為空或都是空值，但 rewardComposition 有值
+          if (!quota.schemeId && quota.paymentMethodId) {
+            if ((!quota.rewardIds || quota.rewardIds.length === 0 || quota.rewardIds.every(id => !id || id.trim() === '')) 
+                && quota.rewardComposition && quota.rewardComposition.trim() !== '') {
+              // 根據 rewardComposition 的數量創建對應的 rewardIds（使用空字串作為佔位符）
+              const count = quota.rewardComposition.split('/').length;
+              quota.rewardIds = Array(count).fill('');
+            }
           }
-        }
-        return {
-          ...quota,
-          sharedRewardGroupId: quota.sharedRewardGroupId ?? quota.shared_reward_group_id ?? null,
-          __index: index,
-        };
-      });
-      setQuotas(processed);
-    } catch (error) {
+          return quota;
+        });
+        setQuotas(processedData);
+      } else {
+        console.error('載入額度錯誤: 資料格式不正確', res.data);
+        setQuotas([]);
+      }
+    } catch (error: any) {
       console.error('載入額度錯誤:', error);
-      alert('載入額度失敗: ' + ((error as { response?: { data?: { error?: string } } }).response?.data?.error ?? (error as Error).message));
+      alert('載入額度失敗: ' + (error.response?.data?.error || error.message || '未知錯誤'));
       setQuotas([]);
     } finally {
       setLoading(false);
     }
   };
 
+  const formatQuota = (value: number | null) => {
+    if (value === null) return '無上限';
+    return value.toLocaleString();
+  };
+
+  // 將額度分為兩類：信用卡、支付方式（移除信用卡綁定支付方式）
   const cardQuotas = quotas.filter(q => q.schemeId && !q.paymentMethodId);
   const paymentQuotas = quotas.filter(q => !q.schemeId && q.paymentMethodId);
 
+  // 按卡片分組（直接列出所有卡片，不使用"未知卡片"）
   const cardGroups = new Map<string, QuotaInfo[]>();
   cardQuotas.forEach(quota => {
+    // 如果沒有 cardId，跳過（不應該發生，但為了安全）
+    // 這可能是資料庫中的錯誤資料，記錄警告但不中斷執行
     if (!quota.cardId) {
-      console.warn('額度資料缺少 cardId（已跳過）:', quota);
+      console.warn('額度資料缺少 cardId（已跳過）:', {
+        schemeId: quota.schemeId,
+        name: quota.name,
+        quota
+      });
       return;
     }
-    if (!cardGroups.has(quota.cardId)) {
-      cardGroups.set(quota.cardId, []);
+    const cardId = quota.cardId;
+    if (!cardGroups.has(cardId)) {
+      cardGroups.set(cardId, []);
     }
-    cardGroups.get(quota.cardId)!.push(quota);
+    cardGroups.get(cardId)!.push(quota);
   });
 
+  // 按支付方式分組
   const paymentGroups = new Map<string, QuotaInfo[]>();
   paymentQuotas.forEach(quota => {
-    const key = quota.paymentMethodIdForGroup || quota.paymentMethodId || 'unknown';
-    if (!paymentGroups.has(key)) {
-      paymentGroups.set(key, []);
+    const paymentId = quota.paymentMethodIdForGroup || quota.paymentMethodId || 'unknown';
+    if (!paymentGroups.has(paymentId)) {
+      paymentGroups.set(paymentId, []);
     }
-    paymentGroups.get(key)!.push(quota);
+    paymentGroups.get(paymentId)!.push(quota);
   });
 
-  const schemeNameMap = new Map<string, string>();
-  quotas.forEach(q => {
-    if (q.schemeId) {
-      schemeNameMap.set(q.schemeId, q.schemeName || q.name);
-    }
-  });
-
-  const bindingGroups = new Map<string, Set<string>>();
-  cardQuotas.forEach(quota => {
-    const rootId = quota.sharedRewardGroupId || quota.schemeId || null;
-    if (!rootId || !quota.schemeId) return;
-    if (!bindingGroups.has(rootId)) {
-      bindingGroups.set(rootId, new Set());
-    }
-    bindingGroups.get(rootId)!.add(quota.schemeId);
-  });
-
-  const bindingColorMap = new Map<string, typeof bindingPalette[number]>();
-  let paletteIndex = 0;
-  bindingGroups.forEach((members, rootId) => {
-    if (members.size > 1) {
-      bindingColorMap.set(rootId, bindingPalette[paletteIndex % bindingPalette.length]);
-      paletteIndex += 1;
-    }
-  });
-
-  const formatQuotaInfo = (used: number, remaining: number | null, limit: number | null) => {
+  // 格式化額度資訊（已使用/剩餘/上限）
+  const formatQuotaInfo = (
+    used: number,
+    remaining: number | null,
+    limit: number | null
+  ) => {
     const usedStr = used.toLocaleString();
     const remainingStr = remaining === null ? '無上限' : remaining.toLocaleString();
     const limitStr = limit === null ? '無上限' : limit.toLocaleString();
@@ -144,9 +124,7 @@ export default function QuotaQuery() {
         </div>
         <div className="text-xs text-gray-600">
           <span className="font-medium">剩餘：</span>
-          <span className={remaining !== null && remaining < (limit || 0) * 0.2 ? 'text-red-600 font-semibold' : 'text-green-600'}>
-            {remainingStr}
-          </span>
+          <span className={remaining !== null && remaining < (limit || 0) * 0.2 ? 'text-red-600 font-semibold' : 'text-green-600'}>{remainingStr}</span>
         </div>
         <div className="text-xs text-gray-500">
           <span className="font-medium">上限：</span>
@@ -156,7 +134,11 @@ export default function QuotaQuery() {
     );
   };
 
-  const formatConsumptionInfo = (current: number, reference: number | null) => {
+  // 格式化消費資訊（當前消費/參考餘額）
+  const formatConsumptionInfo = (
+    current: number,
+    reference: number | null
+  ) => {
     const currentStr = current.toLocaleString();
     const referenceStr = reference === null ? '無上限' : Math.round(reference).toLocaleString();
     return (
@@ -173,190 +155,152 @@ export default function QuotaQuery() {
     );
   };
 
-  const renderQuotaTable = (
-    quotaList: QuotaInfo[],
-    groupKey: string,
-    options?: { groupType: 'card' | 'payment'; cardId?: string; paymentId?: string }
-  ) => {
+  const renderQuotaTable = (quotaList: QuotaInfo[], title: string = '') => {
     if (quotaList.length === 0) return null;
-
-    const isCardGroup = options?.groupType === 'card';
-
-    const tableRows = quotaList.flatMap((quota, localIndex) => {
-      const quotaIndex = typeof quota.__index === 'number' ? quota.__index : localIndex;
-      const bindingRootId =
-        quota.schemeId && isCardGroup ? quota.sharedRewardGroupId || quota.schemeId : null;
-      const isBindingChild =
-        Boolean(bindingRootId) &&
-        quota.sharedRewardGroupId &&
-        quota.schemeId !== bindingRootId;
-
-      if (isCardGroup && isBindingChild) {
-        return [];
-      }
-
-      const bindingMembers =
-        isCardGroup && bindingRootId
-          ? quotaList.filter(member => {
-              if (!member.schemeId) return false;
-              const root = member.sharedRewardGroupId || member.schemeId;
-              return root === bindingRootId;
-            })
-          : [];
-
-      const displayNameQuotas = bindingMembers.length > 0 ? bindingMembers : [quota];
-
-      let validRewardIndices: number[] = [];
-      if (quota.rewardIds?.length) {
-        validRewardIndices = quota.rewardIds.map((_id, idx) => idx);
-      } else if (quota.rewardComposition?.trim()) {
-        const count = quota.rewardComposition.split('/').length;
-        validRewardIndices = Array.from({ length: count }, (_, idx) => idx);
-      } else {
-        validRewardIndices = [0];
-      }
-
-      const rewardCount = validRewardIndices.length;
-      const bindingColors = bindingRootId ? bindingColorMap.get(bindingRootId) : undefined;
-      const defaultBg = quotaIndex % 2 === 0 ? 'bg-white' : 'bg-blue-50';
-      const defaultBorder = quotaIndex % 2 === 0 ? 'border-gray-200' : 'border-blue-200';
-      const rowBgClass = bindingColors?.rowBg ?? defaultBg;
-      const borderColor = bindingColors?.border ?? defaultBorder;
-
-      return validRewardIndices.map((originalIndex, displayIndex) => {
-        const isFirstRow = displayIndex === 0;
-        const rewardPercentage = quota.rewardComposition?.split('/')[originalIndex]?.replace('%', '') || '';
-        const calculationMethod = quota.calculationMethods?.[originalIndex] || 'round';
-        const calculationMethodText =
-          calculationMethod === 'round'
-            ? '四捨五入'
-            : calculationMethod === 'floor'
-              ? '無條件捨去'
-              : '無條件進位';
-
-        const usedQuota = quota.usedQuotas?.[originalIndex] || 0;
-        const remainingQuota = quota.remainingQuotas?.[originalIndex] ?? null;
-        const quotaLimit = quota.quotaLimits?.[originalIndex] ?? null;
-        const currentAmount = quota.currentAmounts?.[originalIndex] || 0;
-        const referenceAmount = quota.referenceAmounts?.[originalIndex] ?? null;
-
-        return (
-          <tr
-            key={`${groupKey}-${quotaIndex}-${originalIndex}`}
-            className={`${rowBgClass} ${borderColor} border-l-4 hover:bg-blue-100 transition-colors`}
-          >
-            {isFirstRow && (
-              <td
-                className={`px-4 py-3 text-sm font-medium sticky left-0 ${rowBgClass} z-10 border-r border-gray-200`}
-                rowSpan={rewardCount}
-              >
-                <div className="space-y-1">
-                  {displayNameQuotas.map(member => (
-                    <div key={member.schemeId || member.name} className="flex items-center gap-1">
-                      <span className="font-semibold text-gray-900">
-                        {member.schemeName || member.name}
-                      </span>
-                      {bindingMembers.length > 1 && member.schemeId === bindingRootId && (
-                        <span className="text-[10px] text-gray-500">(來源)</span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                {(bindingMembers.length > 1 || quota.sharedRewardGroupId) && (
-                  <div
-                    className={`mt-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${
-                      bindingColors ? `${bindingColors.badgeBg} ${bindingColors.badgeText}` : 'bg-blue-100 text-blue-800'
-                    }`}
-                  >
-                    共同回饋綁定
-                    {bindingMembers.length > 1 ? (
-                      <span>（共 {bindingMembers.length} 個方案）</span>
-                    ) : (
-                      quota.sharedRewardGroupId && (
-                        <span>（來源：{schemeNameMap.get(quota.sharedRewardGroupId) || '共享方案'}）</span>
-                      )
-                    )}
-                  </div>
-                )}
-              </td>
-            )}
-            <td className="px-4 py-3 text-sm">
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
-                {rewardPercentage || '-'}%
-              </span>
-            </td>
-            <td className="px-4 py-3 text-sm text-gray-600">
-              {calculationMethodText}
-            </td>
-            <td className="px-4 py-3 text-sm">
-              {formatQuotaInfo(usedQuota, remainingQuota, quotaLimit)}
-            </td>
-            <td className="px-4 py-3 text-sm">
-              {formatConsumptionInfo(currentAmount, referenceAmount)}
-            </td>
-            <td className="px-4 py-3 text-sm text-gray-600">
-              <div className="text-xs">{quota.refreshTimes?.[originalIndex] || '-'}</div>
-            </td>
-          </tr>
-        );
-      });
-    });
-
+    
     return (
-      <div className="border-t border-gray-200 p-4">
-        <div className="overflow-x-auto" style={{ maxHeight: 'calc(100vh - 250px)' }}>
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gradient-to-r from-gray-50 to-gray-100 sticky top-0 z-20 shadow-sm">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider sticky left-0 bg-gradient-to-r from-gray-50 to-gray-100 z-30 border-r border-gray-200">
-                  名稱
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                  回饋組成
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                  計算方式
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider min-w-[140px]">
-                  額度狀態
-                  <div className="text-[10px] font-normal text-gray-500 mt-1">已用/剩餘/上限</div>
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider min-w-[120px]">
-                  消費資訊
-                  <div className="text-[10px] font-normal text-gray-500 mt-1">消費/參考餘額</div>
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                  刷新時間
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">{tableRows}</tbody>
-          </table>
+      <div className={title ? "mb-8" : ""}>
+        {title && <h3 className="text-xl font-semibold mb-4 text-gray-800">{title}</h3>}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+          <div className="overflow-x-auto" style={{ maxHeight: 'calc(100vh - 250px)' }}>
+            <table className={`min-w-full divide-y divide-gray-200 ${isApp() ? 'text-xs' : ''}`}>
+              <thead className="bg-gradient-to-r from-gray-50 to-gray-100 sticky top-0 z-20 shadow-sm">
+                <tr>
+                  <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-semibold text-gray-700 uppercase tracking-wider sticky left-0 bg-gradient-to-r from-gray-50 to-gray-100 z-30 border-r border-gray-200 whitespace-nowrap`}>
+                    名稱
+                  </th>
+                  <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-nowrap`}>
+                    回饋組成
+                  </th>
+                  <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-nowrap`}>
+                    計算方式
+                  </th>
+                  <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-semibold text-gray-700 uppercase tracking-wider ${isApp() ? 'min-w-[100px]' : 'min-w-[140px]'} whitespace-nowrap`}>
+                    額度狀態
+                    <div className="text-[10px] font-normal text-gray-500 mt-1">
+                      已用/剩餘/上限
+                    </div>
+                  </th>
+                  <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-semibold text-gray-700 uppercase tracking-wider ${isApp() ? 'min-w-[90px]' : 'min-w-[120px]'} whitespace-nowrap`}>
+                    消費資訊
+                    <div className="text-[10px] font-normal text-gray-500 mt-1">
+                      消費/參考餘額
+                    </div>
+                  </th>
+                  <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-nowrap`}>
+                    刷新時間
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {quotaList.map((quota, quotaIndex) => {
+                  // 處理 rewardIds：如果為空但 rewardComposition 有值，則使用 rewardComposition 的長度
+                  let validRewardIndices: number[] = [];
+                  
+                  if (quota.rewardIds && quota.rewardIds.length > 0) {
+                    // 如果有 rewardIds，過濾掉空值
+                    quota.rewardIds.forEach((id, index) => {
+                      // 允許空字串（用於只有 own_reward_percentage 的支付方式）
+                      validRewardIndices.push(index);
+                    });
+                  } else if (quota.rewardComposition && quota.rewardComposition.trim() !== '') {
+                    // 如果沒有 rewardIds 但有 rewardComposition，根據 rewardComposition 創建索引
+                    const count = quota.rewardComposition.split('/').length;
+                    validRewardIndices = Array.from({ length: count }, (_, i) => i);
+                  } else {
+                    // 完全沒有資料，顯示一行空資料
+                    validRewardIndices = [0];
+                  }
+                  
+                  const rewardCount = validRewardIndices.length;
+                  // 使用更明顯的顏色區別不同方案
+                  const bgColor = quotaIndex % 2 === 0 ? 'bg-white' : 'bg-blue-50';
+                  const borderColor = quotaIndex % 2 === 0 ? 'border-gray-200' : 'border-blue-200';
+                  
+                  return validRewardIndices.map((originalIndex, displayIndex) => {
+                    const isFirstRow = displayIndex === 0;
+                    const rewardPercentage = quota.rewardComposition?.split('/')[originalIndex]?.replace('%', '') || '';
+                    const calculationMethod = quota.calculationMethods?.[originalIndex] || 'round';
+                    const calculationMethodText = 
+                      calculationMethod === 'round' ? '四捨五入' :
+                      calculationMethod === 'floor' ? '無條件捨去' :
+                      calculationMethod === 'ceil' ? '無條件進位' : '四捨五入';
+                    
+                    const usedQuota = quota.usedQuotas?.[originalIndex] || 0;
+                    const remainingQuota = quota.remainingQuotas?.[originalIndex] ?? null;
+                    const quotaLimit = quota.quotaLimits?.[originalIndex] ?? null;
+                    const currentAmount = quota.currentAmounts?.[originalIndex] || 0;
+                    const referenceAmount = quota.referenceAmounts?.[originalIndex] ?? null;
+                    
+                    return (
+                      <tr key={`${quotaIndex}-${originalIndex}`} className={`${bgColor} ${borderColor} border-l-4 hover:bg-blue-100 transition-colors`}>
+                        {isFirstRow && (
+                          <td
+                            className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm font-medium sticky left-0 ${bgColor} z-10 border-r border-gray-200 whitespace-nowrap`}
+                            rowSpan={rewardCount}
+                          >
+                            <div className="font-semibold text-gray-900">{quota.name}</div>
+                          </td>
+                        )}
+                        <td className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm whitespace-nowrap`}>
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                            {rewardPercentage || '-'}%
+                          </span>
+                        </td>
+                        <td className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm text-gray-600 whitespace-nowrap`}>
+                          <div>
+                            <div>{calculationMethodText}</div>
+                            {quota.quotaCalculationModes?.[originalIndex] && quota.quotaLimits?.[originalIndex] !== null && (
+                              <div className="text-[10px] text-blue-600 mt-1">
+                                {quota.quotaCalculationModes[originalIndex] === 'per_transaction' ? '單筆回饋' : '帳單總額'}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        <td className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm whitespace-nowrap`}>
+                          {formatQuotaInfo(usedQuota, remainingQuota, quotaLimit)}
+                        </td>
+                        <td className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm whitespace-nowrap`}>
+                          {formatConsumptionInfo(currentAmount, referenceAmount)}
+                        </td>
+                        <td className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm text-gray-600 whitespace-nowrap`}>
+                          <div className="text-xs">
+                            {quota.refreshTimes?.[originalIndex] || '-'}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  });
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     );
   };
 
   const toggleCard = (cardId: string) => {
-    const next = new Set(expandedCards);
-    if (next.has(cardId)) {
-      next.delete(cardId);
+    const newExpanded = new Set(expandedCards);
+    if (newExpanded.has(cardId)) {
+      newExpanded.delete(cardId);
     } else {
-      next.add(cardId);
+      newExpanded.add(cardId);
     }
-    setExpandedCards(next);
+    setExpandedCards(newExpanded);
   };
 
   const togglePayment = (paymentId: string) => {
-    const next = new Set(expandedPayments);
-    if (next.has(paymentId)) {
-      next.delete(paymentId);
+    const newExpanded = new Set(expandedPayments);
+    if (newExpanded.has(paymentId)) {
+      newExpanded.delete(paymentId);
     } else {
-      next.add(paymentId);
+      newExpanded.add(paymentId);
     }
-    setExpandedPayments(next);
+    setExpandedPayments(newExpanded);
   };
 
+  // 如果沒有任何額度資料，顯示提示訊息
   const hasAnyQuota = cardQuotas.length > 0 || paymentQuotas.length > 0;
 
   if (loading) {
@@ -366,7 +310,7 @@ export default function QuotaQuery() {
           額度查詢
         </h2>
         <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600" />
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600"></div>
           <span className="ml-3 text-gray-600">載入中...</span>
         </div>
       </div>
@@ -385,12 +329,13 @@ export default function QuotaQuery() {
         </div>
       )}
 
+      {/* 信用卡區塊 */}
       {cardGroups.size > 0 && (
         <div className="mb-8">
           <h3 className="text-xl font-semibold mb-4 text-gray-800">信用卡</h3>
           <div className="space-y-2">
-            {Array.from(cardGroups.entries()).map(([cardId, group]) => {
-              const cardName = group[0]?.cardName || cardId;
+            {Array.from(cardGroups.entries()).map(([cardId, quotas]) => {
+              const cardName = quotas[0]?.cardName || cardId;
               const isExpanded = expandedCards.has(cardId);
               return (
                 <div key={cardId} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
@@ -401,7 +346,116 @@ export default function QuotaQuery() {
                     <span className="font-medium text-gray-900">{cardName}</span>
                     <span className="text-gray-500">{isExpanded ? '▼' : '▶'}</span>
                   </button>
-                  {isExpanded && renderQuotaTable(group, `card_${cardId}`, { groupType: 'card', cardId })}
+                  {isExpanded && (
+                    <div className="border-t border-gray-200 p-4">
+                      <div className="overflow-x-auto" style={{ maxHeight: 'calc(100vh - 250px)' }}>
+                        <table className={`min-w-full divide-y divide-gray-200 ${isApp() ? 'text-xs' : ''}`}>
+                          <thead className="bg-gradient-to-r from-gray-50 to-gray-100 sticky top-0 z-20 shadow-sm">
+                            <tr>
+                              <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-semibold text-gray-700 uppercase tracking-wider sticky left-0 bg-gradient-to-r from-gray-50 to-gray-100 z-30 border-r border-gray-200 whitespace-nowrap`}>
+                                名稱
+                              </th>
+                              <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-nowrap`}>
+                                回饋組成
+                              </th>
+                              <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-nowrap`}>
+                                計算方式
+                              </th>
+                              <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-semibold text-gray-700 uppercase tracking-wider ${isApp() ? 'min-w-[100px]' : 'min-w-[140px]'} whitespace-nowrap`}>
+                                額度狀態
+                                <div className="text-[10px] font-normal text-gray-500 mt-1">
+                                  已用/剩餘/上限
+                                </div>
+                              </th>
+                              <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-semibold text-gray-700 uppercase tracking-wider ${isApp() ? 'min-w-[90px]' : 'min-w-[120px]'} whitespace-nowrap`}>
+                                消費資訊
+                                <div className="text-[10px] font-normal text-gray-500 mt-1">
+                                  消費/參考餘額
+                                </div>
+                              </th>
+                              <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-nowrap`}>
+                                刷新時間
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {quotas.map((quota, quotaIndex) => {
+                              // 處理 rewardIds：如果為空但 rewardComposition 有值，則使用 rewardComposition 的長度
+                              let validRewardIndices: number[] = [];
+                              
+                              if (quota.rewardIds && quota.rewardIds.length > 0) {
+                                // 如果有 rewardIds，過濾掉空值
+                                quota.rewardIds.forEach((id, index) => {
+                                  // 允許空字串（用於只有 own_reward_percentage 的支付方式）
+                                  validRewardIndices.push(index);
+                                });
+                              } else if (quota.rewardComposition && quota.rewardComposition.trim() !== '') {
+                                // 如果沒有 rewardIds 但有 rewardComposition，根據 rewardComposition 創建索引
+                                const count = quota.rewardComposition.split('/').length;
+                                validRewardIndices = Array.from({ length: count }, (_, i) => i);
+                              } else {
+                                // 完全沒有資料，顯示一行空資料
+                                validRewardIndices = [0];
+                              }
+                              
+                              const rewardCount = validRewardIndices.length;
+                              // 使用更明顯的顏色區別不同方案
+                              const bgColor = quotaIndex % 2 === 0 ? 'bg-white' : 'bg-blue-50';
+                              const borderColor = quotaIndex % 2 === 0 ? 'border-gray-200' : 'border-blue-200';
+                              
+                              return validRewardIndices.map((originalIndex, displayIndex) => {
+                                const isFirstRow = displayIndex === 0;
+                                const rewardPercentage = quota.rewardComposition?.split('/')[originalIndex]?.replace('%', '') || '';
+                                const calculationMethod = quota.calculationMethods?.[originalIndex] || 'round';
+                                const calculationMethodText = 
+                                  calculationMethod === 'round' ? '四捨五入' :
+                                  calculationMethod === 'floor' ? '無條件捨去' :
+                                  calculationMethod === 'ceil' ? '無條件進位' : '四捨五入';
+                                
+                                const usedQuota = quota.usedQuotas?.[originalIndex] || 0;
+                                const remainingQuota = quota.remainingQuotas?.[originalIndex] ?? null;
+                                const quotaLimit = quota.quotaLimits?.[originalIndex] ?? null;
+                                const currentAmount = quota.currentAmounts?.[originalIndex] || 0;
+                                const referenceAmount = quota.referenceAmounts?.[originalIndex] ?? null;
+                                
+                                return (
+                                  <tr key={`${quotaIndex}-${originalIndex}`} className={`${bgColor} ${borderColor} border-l-4 hover:bg-blue-100 transition-colors`}>
+                                    {isFirstRow && (
+                                      <td
+                                        className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm font-medium sticky left-0 ${bgColor} z-10 border-r border-gray-200 whitespace-nowrap`}
+                                        rowSpan={rewardCount}
+                                      >
+                                        <div className="font-semibold text-gray-900">{quota.name}</div>
+                                      </td>
+                                    )}
+                                    <td className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm whitespace-nowrap`}>
+                                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                                        {rewardPercentage || '-'}%
+                                      </span>
+                                    </td>
+                                    <td className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm text-gray-600 whitespace-nowrap`}>
+                                      {calculationMethodText}
+                                    </td>
+                                    <td className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm whitespace-nowrap`}>
+                                      {formatQuotaInfo(usedQuota, remainingQuota, quotaLimit)}
+                                    </td>
+                                    <td className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm whitespace-nowrap`}>
+                                      {formatConsumptionInfo(currentAmount, referenceAmount)}
+                                    </td>
+                                    <td className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm text-gray-600 whitespace-nowrap`}>
+                                      <div className="text-xs">
+                                        {quota.refreshTimes?.[originalIndex] || '-'}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              });
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -409,12 +463,13 @@ export default function QuotaQuery() {
         </div>
       )}
 
+      {/* 支付方式區塊 */}
       {paymentGroups.size > 0 && (
         <div className="mb-8">
           <h3 className="text-xl font-semibold mb-4 text-gray-800">支付方式</h3>
           <div className="space-y-2">
-            {Array.from(paymentGroups.entries()).map(([paymentId, group]) => {
-              const paymentName = group[0]?.paymentMethodName || group[0]?.name || '未知支付方式';
+            {Array.from(paymentGroups.entries()).map(([paymentId, quotas]) => {
+              const paymentName = quotas[0]?.paymentMethodName || quotas[0]?.name || '未知支付方式';
               const isExpanded = expandedPayments.has(paymentId);
               return (
                 <div key={paymentId} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
@@ -425,8 +480,116 @@ export default function QuotaQuery() {
                     <span className="font-medium text-gray-900">{paymentName}</span>
                     <span className="text-gray-500">{isExpanded ? '▼' : '▶'}</span>
                   </button>
-                  {isExpanded &&
-                    renderQuotaTable(group, `payment_${paymentId}`, { groupType: 'payment', paymentId })}
+                  {isExpanded && (
+                    <div className="border-t border-gray-200 p-4">
+                      <div className="overflow-x-auto" style={{ maxHeight: 'calc(100vh - 250px)' }}>
+                        <table className={`min-w-full divide-y divide-gray-200 ${isApp() ? 'text-xs' : ''}`}>
+                          <thead className="bg-gradient-to-r from-gray-50 to-gray-100 sticky top-0 z-20 shadow-sm">
+                            <tr>
+                              <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-semibold text-gray-700 uppercase tracking-wider sticky left-0 bg-gradient-to-r from-gray-50 to-gray-100 z-30 border-r border-gray-200 whitespace-nowrap`}>
+                                名稱
+                              </th>
+                              <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-nowrap`}>
+                                回饋組成
+                              </th>
+                              <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-nowrap`}>
+                                計算方式
+                              </th>
+                              <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-semibold text-gray-700 uppercase tracking-wider ${isApp() ? 'min-w-[100px]' : 'min-w-[140px]'} whitespace-nowrap`}>
+                                額度狀態
+                                <div className="text-[10px] font-normal text-gray-500 mt-1">
+                                  已用/剩餘/上限
+                                </div>
+                              </th>
+                              <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-semibold text-gray-700 uppercase tracking-wider ${isApp() ? 'min-w-[90px]' : 'min-w-[120px]'} whitespace-nowrap`}>
+                                消費資訊
+                                <div className="text-[10px] font-normal text-gray-500 mt-1">
+                                  消費/參考餘額
+                                </div>
+                              </th>
+                              <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-nowrap`}>
+                                刷新時間
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {quotas.map((quota, quotaIndex) => {
+                              // 處理 rewardIds：如果為空但 rewardComposition 有值，則使用 rewardComposition 的長度
+                              let validRewardIndices: number[] = [];
+                              
+                              if (quota.rewardIds && quota.rewardIds.length > 0) {
+                                // 如果有 rewardIds，過濾掉空值
+                                quota.rewardIds.forEach((id, index) => {
+                                  // 允許空字串（用於只有 own_reward_percentage 的支付方式）
+                                  validRewardIndices.push(index);
+                                });
+                              } else if (quota.rewardComposition && quota.rewardComposition.trim() !== '') {
+                                // 如果沒有 rewardIds 但有 rewardComposition，根據 rewardComposition 創建索引
+                                const count = quota.rewardComposition.split('/').length;
+                                validRewardIndices = Array.from({ length: count }, (_, i) => i);
+                              } else {
+                                // 完全沒有資料，顯示一行空資料
+                                validRewardIndices = [0];
+                              }
+                              
+                              const rewardCount = validRewardIndices.length;
+                              // 使用更明顯的顏色區別不同方案
+                              const bgColor = quotaIndex % 2 === 0 ? 'bg-white' : 'bg-blue-50';
+                              const borderColor = quotaIndex % 2 === 0 ? 'border-gray-200' : 'border-blue-200';
+                              
+                              return validRewardIndices.map((originalIndex, displayIndex) => {
+                                const isFirstRow = displayIndex === 0;
+                                const rewardPercentage = quota.rewardComposition?.split('/')[originalIndex]?.replace('%', '') || '';
+                                const calculationMethod = quota.calculationMethods?.[originalIndex] || 'round';
+                                const calculationMethodText = 
+                                  calculationMethod === 'round' ? '四捨五入' :
+                                  calculationMethod === 'floor' ? '無條件捨去' :
+                                  calculationMethod === 'ceil' ? '無條件進位' : '四捨五入';
+                                
+                                const usedQuota = quota.usedQuotas?.[originalIndex] || 0;
+                                const remainingQuota = quota.remainingQuotas?.[originalIndex] ?? null;
+                                const quotaLimit = quota.quotaLimits?.[originalIndex] ?? null;
+                                const currentAmount = quota.currentAmounts?.[originalIndex] || 0;
+                                const referenceAmount = quota.referenceAmounts?.[originalIndex] ?? null;
+                                
+                                return (
+                                  <tr key={`${quotaIndex}-${originalIndex}`} className={`${bgColor} ${borderColor} border-l-4 hover:bg-blue-100 transition-colors`}>
+                                    {isFirstRow && (
+                                      <td
+                                        className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm font-medium sticky left-0 ${bgColor} z-10 border-r border-gray-200 whitespace-nowrap`}
+                                        rowSpan={rewardCount}
+                                      >
+                                        <div className="font-semibold text-gray-900">{quota.name}</div>
+                                      </td>
+                                    )}
+                                    <td className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm whitespace-nowrap`}>
+                                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                                        {rewardPercentage || '-'}%
+                                      </span>
+                                    </td>
+                                    <td className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm text-gray-600 whitespace-nowrap`}>
+                                      {calculationMethodText}
+                                    </td>
+                                    <td className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm whitespace-nowrap`}>
+                                      {formatQuotaInfo(usedQuota, remainingQuota, quotaLimit)}
+                                    </td>
+                                    <td className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm whitespace-nowrap`}>
+                                      {formatConsumptionInfo(currentAmount, referenceAmount)}
+                                    </td>
+                                    <td className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm text-gray-600 whitespace-nowrap`}>
+                                      <div className="text-xs">
+                                        {quota.refreshTimes?.[originalIndex] || '-'}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              });
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -436,4 +599,3 @@ export default function QuotaQuery() {
     </div>
   );
 }
-

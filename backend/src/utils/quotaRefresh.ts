@@ -48,29 +48,25 @@ export function calculateNextRefreshTime(
   switch (refreshType) {
     case 'monthly':
       if (refreshValue === null) return null;
+      // 驗證刷新日期在1~28之間
+      if (refreshValue < 1 || refreshValue > 28) {
+        console.warn(`無效的刷新日期: ${refreshValue}，應在1~28之間`);
+        return null;
+      }
       // 每月固定日期刷新（UTC+8 時區）
-      // 取得 UTC+8 時區的當前月份開始時間
+      // 取得 UTC+8 時區的當前時間
       const nowTaipei = utcToZonedTime(now, TIMEZONE);
-      const currentMonth = startOfMonth(nowTaipei);
+      const currentYear = nowTaipei.getFullYear();
+      const currentMonth = nowTaipei.getMonth();
       
-      // 在 UTC+8 時區創建本月刷新時間（n號 00:00:00）
-      const thisMonthRefreshTaipei = new Date(
-        currentMonth.getFullYear(),
-        currentMonth.getMonth(),
-        refreshValue,
-        0, 0, 0, 0
-      );
+      // 計算本月刷新時間（n號 00:00:00），因為限制在1~28號，所以不需要處理月份天數問題
+      const thisMonthRefreshTaipei = new Date(currentYear, currentMonth, refreshValue, 0, 0, 0, 0);
       
-      // 下個月的刷新時間
-      const nextMonthRefreshTaipei = new Date(
-        currentMonth.getFullYear(),
-        currentMonth.getMonth() + 1,
-        refreshValue,
-        0, 0, 0, 0
-      );
+      // 計算下個月刷新時間
+      const nextMonthRefreshTaipei = new Date(currentYear, currentMonth + 1, refreshValue, 0, 0, 0, 0);
 
-      // 如果這個月的刷新日已過，則設為下個月
-      if (isBefore(thisMonthRefreshTaipei, nowTaipei)) {
+      // 如果這個月的刷新日已過或等於，則設為下個月
+      if (!isAfter(thisMonthRefreshTaipei, nowTaipei)) {
         // 轉換為 UTC 時間儲存
         return toUtcDate(nextMonthRefreshTaipei);
       }
