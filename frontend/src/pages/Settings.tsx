@@ -286,7 +286,6 @@ function CardItem({
     quotaRefreshType: string | null;
     quotaRefreshValue: number | null;
     quotaRefreshDate: string | null;
-    quotaCalculationMode: 'per_transaction' | 'total_amount';
     displayOrder: number;
   }>>([]);
   const [schemeFormData, setSchemeFormData] = useState({
@@ -1138,7 +1137,6 @@ function PaymentMethodItem({
     quotaRefreshType: string | null;
     quotaRefreshValue: number | null;
     quotaRefreshDate: string | null;
-    quotaCalculationMode: 'per_transaction' | 'total_amount';
     displayOrder: number;
   }>>([]);
 
@@ -1376,7 +1374,6 @@ function PaymentMethodItem({
           quotaRefreshType: r.quota_refresh_type || null,
           quotaRefreshValue: r.quota_refresh_value || null,
           quotaRefreshDate: r.quota_refresh_date ? r.quota_refresh_date.split('T')[0] : null,
-          quotaCalculationMode: (r.quota_calculation_mode || 'per_transaction') as 'per_transaction' | 'total_amount',
           displayOrder: r.display_order || 0,
         }))
       );
@@ -1396,7 +1393,6 @@ function PaymentMethodItem({
         quotaRefreshType: null,
         quotaRefreshValue: null,
         quotaRefreshDate: null,
-        quotaCalculationMode: 'per_transaction',
         displayOrder: rewards.length,
       },
     ]);
@@ -1420,7 +1416,6 @@ function PaymentMethodItem({
           quotaRefreshType: r.quotaRefreshType,
           quotaRefreshValue: r.quotaRefreshValue,
           quotaRefreshDate: r.quotaRefreshDate || null,
-          quotaCalculationMode: r.quotaCalculationMode || 'per_transaction',
           displayOrder: idx,
         })),
       });
@@ -1676,16 +1671,11 @@ function PaymentMethodItem({
                           <input
                             type="number"
                             min="1"
-                            max="28"
+                            max="31"
                             value={reward.quotaRefreshValue || ''}
                             onChange={(e) => {
                               const newRewards = [...rewards];
-                              const value = e.target.value ? parseInt(e.target.value) : null;
-                              // 限制在1~28之間
-                              if (value !== null && (value < 1 || value > 28)) {
-                                return;
-                              }
-                              newRewards[index].quotaRefreshValue = value;
+                              newRewards[index].quotaRefreshValue = e.target.value ? parseInt(e.target.value) : null;
                               setRewards(newRewards);
                             }}
                             className="w-full px-2 py-1 border rounded text-xs"
@@ -1705,47 +1695,6 @@ function PaymentMethodItem({
                             }}
                             className="w-full px-2 py-1 border rounded text-xs"
                           />
-                        </div>
-                      )}
-                      {reward.quotaLimit !== null && (
-                        <div>
-                          <label className="text-xs font-medium block mb-1">額度計算方式</label>
-                          <div className="flex gap-4">
-                            <label className="flex items-center gap-2 text-xs">
-                              <input
-                                type="radio"
-                                name={`quotaCalculationMode-${index}`}
-                                value="per_transaction"
-                                checked={reward.quotaCalculationMode === 'per_transaction'}
-                                onChange={(e) => {
-                                  const newRewards = [...rewards];
-                                  newRewards[index].quotaCalculationMode = 'per_transaction';
-                                  setRewards(newRewards);
-                                }}
-                                className="w-3 h-3"
-                              />
-                              <span>單筆回饋</span>
-                            </label>
-                            <label className="flex items-center gap-2 text-xs">
-                              <input
-                                type="radio"
-                                name={`quotaCalculationMode-${index}`}
-                                value="total_amount"
-                                checked={reward.quotaCalculationMode === 'total_amount'}
-                                onChange={(e) => {
-                                  const newRewards = [...rewards];
-                                  newRewards[index].quotaCalculationMode = 'total_amount';
-                                  setRewards(newRewards);
-                                }}
-                                className="w-3 h-3"
-                              />
-                              <span>帳單總額</span>
-                            </label>
-                          </div>
-                          <p className="text-[10px] text-gray-500 mt-1">
-                            單筆回饋：每筆消費過後的計算方式（四捨五入等）<br/>
-                            帳單總額：總消費金額的計算方式
-                          </p>
                         </div>
                       )}
                     </div>
@@ -3080,9 +3029,19 @@ function CalculateSettings() {
                 <label className="block text-sm font-medium mb-1">選擇方案 *</label>
                 <select
                   value={formData.selectedSchemeId}
-                  onChange={(e: ChangeEvent<HTMLSelectElement>) => {
+                  onChange={async (e: ChangeEvent<HTMLSelectElement>) => {
                     const schemeId = e.target.value;
                     setFormData({ ...formData, selectedSchemeId: schemeId, selectedPaymentMethodId: '' });
+                    setSelectedSchemePaymentMethods([]);
+                    if (schemeId) {
+                      try {
+                        const res = await api.get(`/payment-methods/scheme/${schemeId}`);
+                        setSelectedSchemePaymentMethods(res.data.data || []);
+                      } catch (error) {
+                        console.error('載入支付方式錯誤:', error);
+                        setSelectedSchemePaymentMethods([]);
+                      }
+                    }
                   }}
                   className="w-full px-3 py-2 border rounded"
                 >
@@ -3090,6 +3049,23 @@ function CalculateSettings() {
                   {selectedCardSchemes.map((scheme) => (
                     <option key={scheme.id} value={scheme.id}>
                       {scheme.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {formData.selectedType === 'card' && formData.selectedSchemeId && selectedSchemePaymentMethods.length > 0 && (
+              <div>
+                <label className="block text-sm font-medium mb-1">選擇支付方式（可選）</label>
+                <select
+                  value={formData.selectedPaymentMethodId}
+                  onChange={(e: ChangeEvent<HTMLSelectElement>) => setFormData({ ...formData, selectedPaymentMethodId: e.target.value })}
+                  className="w-full px-3 py-2 border rounded"
+                >
+                  <option value="">不使用支付方式</option>
+                  {selectedSchemePaymentMethods.map((pm) => (
+                    <option key={pm.id} value={pm.id}>
+                      {pm.name}
                     </option>
                   ))}
                 </select>
@@ -3799,9 +3775,19 @@ function TransactionSettings() {
                         <label className="block text-sm font-medium mb-1">選擇方案 *</label>
                         <select
                           value={formData.selectedSchemeId}
-                          onChange={(e: ChangeEvent<HTMLSelectElement>) => {
+                          onChange={async (e: ChangeEvent<HTMLSelectElement>) => {
                             const schemeId = e.target.value;
                             setFormData({ ...formData, selectedSchemeId: schemeId, selectedPaymentMethodId: '' });
+                            setSelectedSchemePaymentMethods([]);
+                            if (schemeId) {
+                              try {
+                                const res = await api.get(`/payment-methods/scheme/${schemeId}`);
+                                setSelectedSchemePaymentMethods(res.data.data || []);
+                              } catch (error) {
+                                console.error('載入支付方式錯誤:', error);
+                                setSelectedSchemePaymentMethods([]);
+                              }
+                            }
                           }}
                           className="w-full px-3 py-2 border rounded"
                         >
@@ -3809,6 +3795,23 @@ function TransactionSettings() {
                           {selectedCardSchemes.map((scheme) => (
                             <option key={scheme.id} value={scheme.id}>
                               {scheme.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    {formData.selectedType === 'card' && formData.selectedSchemeId && selectedSchemePaymentMethods.length > 0 && (
+                      <div>
+                        <label className="block text-sm font-medium mb-1">選擇支付方式（可選）</label>
+                        <select
+                          value={formData.selectedPaymentMethodId}
+                          onChange={(e: ChangeEvent<HTMLSelectElement>) => setFormData({ ...formData, selectedPaymentMethodId: e.target.value })}
+                          className="w-full px-3 py-2 border rounded"
+                        >
+                          <option value="">不使用支付方式</option>
+                          {selectedSchemePaymentMethods.map((pm) => (
+                            <option key={pm.id} value={pm.id}>
+                              {pm.name}
                             </option>
                           ))}
                         </select>
@@ -3979,7 +3982,6 @@ function QuotaSettings() {
     quotaRefreshTypes?: Array<string | null>;
     quotaRefreshValues?: Array<number | null>;
     quotaRefreshDates?: Array<string | null>;
-    quotaCalculationModes?: Array<'per_transaction' | 'total_amount'>;
     cardId?: string | null;
     paymentMethodIdForGroup?: string | null;
     cardName?: string | null;
@@ -4268,7 +4270,6 @@ function QuotaSettings() {
     quotaRefreshType: '',
     quotaRefreshValue: '',
     quotaRefreshDate: '',
-    quotaCalculationMode: 'per_transaction' as 'per_transaction' | 'total_amount',
   });
   const [rewardAddForm, setRewardAddForm] = useState({
     rewardPercentage: '',
@@ -4277,7 +4278,6 @@ function QuotaSettings() {
     quotaRefreshType: '',
     quotaRefreshValue: '',
     quotaRefreshDate: '',
-    quotaCalculationMode: 'per_transaction' as 'per_transaction' | 'total_amount',
   });
   const refreshTypeOptions = [
     { value: '', label: '無' },
@@ -4317,7 +4317,6 @@ function QuotaSettings() {
     const quotaRefreshType = quota.quotaRefreshTypes?.[rewardIndex] || null;
     const quotaRefreshValue = quota.quotaRefreshValues?.[rewardIndex] ?? null;
     const quotaRefreshDate = quota.quotaRefreshDates?.[rewardIndex] || null;
-    const quotaCalculationMode = quota.quotaCalculationModes?.[rewardIndex] || 'per_transaction';
     
     setEditingReward({ quotaIndex, rewardIndex, groupKey });
     setRewardEditForm({
@@ -4327,7 +4326,6 @@ function QuotaSettings() {
       quotaRefreshType: quotaRefreshType || '',
       quotaRefreshValue: quotaRefreshValue !== null ? String(quotaRefreshValue) : '',
       quotaRefreshDate: quotaRefreshDate || '',
-      quotaCalculationMode,
     });
   };
 
@@ -4348,7 +4346,6 @@ function QuotaSettings() {
           quotaRefreshType: rewardEditForm.quotaRefreshType || null,
           quotaRefreshValue: rewardEditForm.quotaRefreshValue ? parseInt(rewardEditForm.quotaRefreshValue) : null,
           quotaRefreshDate: rewardEditForm.quotaRefreshDate || null,
-          quotaCalculationMode: rewardEditForm.quotaCalculationMode,
         });
       } else if (quota.paymentMethodId) {
         await api.put(`/payment-methods/${quota.paymentMethodId}/rewards/${rewardId}`, {
@@ -4358,7 +4355,6 @@ function QuotaSettings() {
           quotaRefreshType: rewardEditForm.quotaRefreshType || null,
           quotaRefreshValue: rewardEditForm.quotaRefreshValue ? parseInt(rewardEditForm.quotaRefreshValue) : null,
           quotaRefreshDate: rewardEditForm.quotaRefreshDate || null,
-          quotaCalculationMode: rewardEditForm.quotaCalculationMode,
         });
       } else {
         alert('無法編輯：缺少必要資訊');
@@ -4382,7 +4378,6 @@ function QuotaSettings() {
       quotaRefreshType: '',
       quotaRefreshValue: '',
       quotaRefreshDate: '',
-      quotaCalculationMode: 'per_transaction',
     });
   };
 
@@ -4407,7 +4402,6 @@ function QuotaSettings() {
           quotaRefreshType: rewardAddForm.quotaRefreshType || null,
           quotaRefreshValue: rewardAddForm.quotaRefreshValue ? parseInt(rewardAddForm.quotaRefreshValue) : null,
           quotaRefreshDate: rewardAddForm.quotaRefreshDate || null,
-          quotaCalculationMode: rewardAddForm.quotaCalculationMode,
           displayOrder: quota.rewardIds?.length || 0,
         });
       } else if (quota.paymentMethodId) {
@@ -4418,7 +4412,6 @@ function QuotaSettings() {
           quotaRefreshType: rewardAddForm.quotaRefreshType || null,
           quotaRefreshValue: rewardAddForm.quotaRefreshValue ? parseInt(rewardAddForm.quotaRefreshValue) : null,
           quotaRefreshDate: rewardAddForm.quotaRefreshDate || null,
-          quotaCalculationMode: rewardAddForm.quotaCalculationMode,
           displayOrder: quota.rewardIds?.length || 0,
         });
       } else {
@@ -4762,20 +4755,15 @@ function QuotaSettings() {
                       <input
                         type="number"
                         min="1"
-                        max="28"
+                        max="31"
                         value={
                           isNewRow ? rewardAddForm.quotaRefreshValue || '' : rewardEditForm.quotaRefreshValue || ''
                         }
                         onChange={(e) => {
-                          const value = e.target.value ? parseInt(e.target.value) : null;
-                          // 限制在1~28之間
-                          if (value !== null && (value < 1 || value > 28)) {
-                            return;
-                          }
                           if (isNewRow) {
-                            setRewardAddForm({ ...rewardAddForm, quotaRefreshValue: value });
+                            setRewardAddForm({ ...rewardAddForm, quotaRefreshValue: e.target.value });
                           } else {
-                            setRewardEditForm({ ...rewardEditForm, quotaRefreshValue: value });
+                            setRewardEditForm({ ...rewardEditForm, quotaRefreshValue: e.target.value });
                           }
                         }}
                         className="w-full px-2 py-1 border rounded text-xs"
@@ -4799,51 +4787,6 @@ function QuotaSettings() {
                         }}
                         className="w-full px-2 py-1 border rounded text-xs"
                       />
-                    </div>
-                  )}
-                  {(isNewRow ? rewardAddForm.quotaLimit : rewardEditForm.quotaLimit) && (
-                    <div>
-                      <label className="text-xs font-medium block mb-1">額度計算方式</label>
-                      <div className="flex gap-4">
-                        <label className="flex items-center gap-2 text-xs">
-                          <input
-                            type="radio"
-                            name={`quotaCalculationMode-${quotaIndex}-${isNewRow ? 'new' : originalIndex}`}
-                            value="per_transaction"
-                            checked={(isNewRow ? rewardAddForm.quotaCalculationMode : rewardEditForm.quotaCalculationMode) === 'per_transaction'}
-                            onChange={(e) => {
-                              if (isNewRow) {
-                                setRewardAddForm({ ...rewardAddForm, quotaCalculationMode: 'per_transaction' });
-                              } else {
-                                setRewardEditForm({ ...rewardEditForm, quotaCalculationMode: 'per_transaction' });
-                              }
-                            }}
-                            className="w-3 h-3"
-                          />
-                          <span>單筆回饋</span>
-                        </label>
-                        <label className="flex items-center gap-2 text-xs">
-                          <input
-                            type="radio"
-                            name={`quotaCalculationMode-${quotaIndex}-${isNewRow ? 'new' : originalIndex}`}
-                            value="total_amount"
-                            checked={(isNewRow ? rewardAddForm.quotaCalculationMode : rewardEditForm.quotaCalculationMode) === 'total_amount'}
-                            onChange={(e) => {
-                              if (isNewRow) {
-                                setRewardAddForm({ ...rewardAddForm, quotaCalculationMode: 'total_amount' });
-                              } else {
-                                setRewardEditForm({ ...rewardEditForm, quotaCalculationMode: 'total_amount' });
-                              }
-                            }}
-                            className="w-3 h-3"
-                          />
-                          <span>帳單總額</span>
-                        </label>
-                      </div>
-                      <p className="text-[10px] text-gray-500 mt-1">
-                        單筆回饋：每筆消費過後的計算方式（四捨五入等）<br/>
-                        帳單總額：總消費金額的計算方式
-                      </p>
                     </div>
                   )}
                 </div>

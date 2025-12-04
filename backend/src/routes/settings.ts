@@ -375,9 +375,9 @@ router.delete('/transactions/clear', async (req: Request, res: Response) => {
       // 對每筆交易回退額度
       for (const transaction of transactions) {
         if (transaction.scheme_id && transaction.amount) {
-          // 取得方案的回饋組成（包含額度計算方式）
+          // 取得方案的回饋組成
           const rewardsResult = await client.query(
-            `SELECT sr.id, sr.reward_percentage, sr.calculation_method, sr.quota_calculation_mode
+            `SELECT sr.id, sr.reward_percentage, sr.calculation_method
              FROM scheme_rewards sr
              WHERE sr.scheme_id = $1
              ORDER BY sr.display_order`,
@@ -386,73 +386,40 @@ router.delete('/transactions/clear', async (req: Request, res: Response) => {
 
           const rewards = rewardsResult.rows;
           
+          // 計算回饋（需要導入計算函數）
+          const { calculateTotalReward } = require('../utils/rewardCalculation');
+          const calculation = calculateTotalReward(
+            parseFloat(transaction.amount),
+            rewards.map((r: any) => ({
+              percentage: parseFloat(r.reward_percentage),
+              calculationMethod: r.calculation_method,
+            }))
+          );
+
           // 回退額度
           for (let i = 0; i < rewards.length; i++) {
             const reward = rewards[i];
-            const quotaCalculationMode = reward.quota_calculation_mode || 'per_transaction';
-            
-            // 取得當前的額度追蹤記錄
-            const quotaResult = await client.query(
-              `SELECT id, used_quota, current_amount
-               FROM quota_trackings
-               WHERE scheme_id = $1 AND reward_id = $2
-               AND (payment_method_id = $3 OR (payment_method_id IS NULL AND $3 IS NULL))`,
-              [transaction.scheme_id, reward.id, transaction.payment_method_id || null]
-            );
-            
-            if (quotaResult.rows.length > 0) {
-              const quota = quotaResult.rows[0];
-              const newCurrentAmount = parseFloat(quota.current_amount) - parseFloat(transaction.amount);
-              
-              let newUsedQuota: number;
-              if (quotaCalculationMode === 'total_amount') {
-                // 帳單總額模式：重新計算總額的回饋
-                const { calculateReward } = require('../utils/rewardCalculation');
-                newUsedQuota = calculateReward(
-                  newCurrentAmount,
-                  parseFloat(reward.reward_percentage),
-                  reward.calculation_method
-                );
-              } else {
-                // 單筆回饋模式：回退單筆回饋
-                const { calculateReward } = require('../utils/rewardCalculation');
-                const calculatedReward = calculateReward(
-                  parseFloat(transaction.amount),
-                  parseFloat(reward.reward_percentage),
-                  reward.calculation_method
-                );
-                newUsedQuota = parseFloat(quota.used_quota) - calculatedReward;
-              }
-              
-              // 計算剩餘額度
-              const quotaLimitResult = await client.query(
-                `SELECT quota_limit FROM scheme_rewards WHERE id = $1`,
-                [reward.id]
-              );
-              const quotaLimit = quotaLimitResult.rows[0]?.quota_limit ? parseFloat(quotaLimitResult.rows[0].quota_limit) : null;
-              let newRemainingQuota: number | null = null;
-              if (quotaLimit !== null) {
-                newRemainingQuota = quotaLimit - newUsedQuota;
-                if (newRemainingQuota < 0) {
-                  newRemainingQuota = 0;
-                }
-              }
+            const calculatedReward = calculation.breakdown[i].calculatedReward;
 
-              await client.query(
-                `UPDATE quota_trackings
-                 SET used_quota = $1,
-                     remaining_quota = $2,
-                     current_amount = $3,
-                     updated_at = CURRENT_TIMESTAMP
-                 WHERE id = $4`,
-                [
-                  newUsedQuota,
-                  newRemainingQuota,
-                  newCurrentAmount,
-                  quota.id,
-                ]
-              );
-            }
+            await client.query(
+              `UPDATE quota_trackings
+               SET used_quota = used_quota - $1,
+                   remaining_quota = CASE 
+                     WHEN remaining_quota IS NOT NULL THEN remaining_quota + $1
+                     ELSE NULL
+                   END,
+                   current_amount = current_amount - $2,
+                   updated_at = CURRENT_TIMESTAMP
+               WHERE scheme_id = $3 AND reward_id = $4
+               AND (payment_method_id = $5 OR (payment_method_id IS NULL AND $5 IS NULL))`,
+              [
+                calculatedReward,
+                parseFloat(transaction.amount),
+                transaction.scheme_id,
+                reward.id,
+                transaction.payment_method_id || null,
+              ]
+            );
           }
         }
       }

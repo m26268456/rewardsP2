@@ -33,7 +33,7 @@ export const rewardSchema = z.object({
   calculationMethod: z.enum(['round', 'floor', 'ceil']).default('round'),
   quotaLimit: z.number().min(0).optional().nullable(),
   quotaRefreshType: z.enum(['daily', 'monthly', 'yearly', 'custom']).optional().nullable(),
-  quotaRefreshValue: z.number().int().min(1).max(28).optional().nullable(),
+  quotaRefreshValue: z.number().int().min(1).optional().nullable(),
   quotaRefreshDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
   displayOrder: z.number().int().min(0).optional(),
 });

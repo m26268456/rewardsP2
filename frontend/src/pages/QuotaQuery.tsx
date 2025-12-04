@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import api from '../utils/api';
-import { isApp } from '../utils/isApp';
 
 interface QuotaInfo {
   schemeId: string | null;
@@ -15,7 +14,6 @@ interface QuotaInfo {
   referenceAmounts: Array<number | null>;
   refreshTimes: string[];
   rewardIds: string[];
-  quotaCalculationModes?: Array<'per_transaction' | 'total_amount'>;
   cardId?: string | null;
   paymentMethodIdForGroup?: string | null;
   cardName?: string | null;
@@ -163,31 +161,31 @@ export default function QuotaQuery() {
         {title && <h3 className="text-xl font-semibold mb-4 text-gray-800">{title}</h3>}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
           <div className="overflow-x-auto" style={{ maxHeight: 'calc(100vh - 250px)' }}>
-            <table className={`min-w-full divide-y divide-gray-200 ${isApp() ? 'text-xs' : ''}`}>
+            <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gradient-to-r from-gray-50 to-gray-100 sticky top-0 z-20 shadow-sm">
                 <tr>
-                  <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-semibold text-gray-700 uppercase tracking-wider sticky left-0 bg-gradient-to-r from-gray-50 to-gray-100 z-30 border-r border-gray-200 whitespace-nowrap`}>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider sticky left-0 bg-gradient-to-r from-gray-50 to-gray-100 z-30 border-r border-gray-200">
                     名稱
                   </th>
-                  <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-nowrap`}>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                     回饋組成
                   </th>
-                  <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-nowrap`}>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                     計算方式
                   </th>
-                  <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-semibold text-gray-700 uppercase tracking-wider ${isApp() ? 'min-w-[100px]' : 'min-w-[140px]'} whitespace-nowrap`}>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider min-w-[140px]">
                     額度狀態
                     <div className="text-[10px] font-normal text-gray-500 mt-1">
                       已用/剩餘/上限
                     </div>
                   </th>
-                  <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-semibold text-gray-700 uppercase tracking-wider ${isApp() ? 'min-w-[90px]' : 'min-w-[120px]'} whitespace-nowrap`}>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider min-w-[120px]">
                     消費資訊
                     <div className="text-[10px] font-normal text-gray-500 mt-1">
                       消費/參考餘額
                     </div>
                   </th>
-                  <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-nowrap`}>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                     刷新時間
                   </th>
                 </tr>
@@ -236,34 +234,27 @@ export default function QuotaQuery() {
                       <tr key={`${quotaIndex}-${originalIndex}`} className={`${bgColor} ${borderColor} border-l-4 hover:bg-blue-100 transition-colors`}>
                         {isFirstRow && (
                           <td
-                            className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm font-medium sticky left-0 ${bgColor} z-10 border-r border-gray-200 whitespace-nowrap`}
+                            className={`px-4 py-3 text-sm font-medium sticky left-0 ${bgColor} z-10 border-r border-gray-200`}
                             rowSpan={rewardCount}
                           >
                             <div className="font-semibold text-gray-900">{quota.name}</div>
                           </td>
                         )}
-                        <td className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm whitespace-nowrap`}>
+                        <td className="px-4 py-3 text-sm">
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
                             {rewardPercentage || '-'}%
                           </span>
                         </td>
-                        <td className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm text-gray-600 whitespace-nowrap`}>
-                          <div>
-                            <div>{calculationMethodText}</div>
-                            {quota.quotaCalculationModes?.[originalIndex] && quota.quotaLimits?.[originalIndex] !== null && (
-                              <div className="text-[10px] text-blue-600 mt-1">
-                                {quota.quotaCalculationModes[originalIndex] === 'per_transaction' ? '單筆回饋' : '帳單總額'}
-                              </div>
-                            )}
-                          </div>
+                        <td className="px-4 py-3 text-sm text-gray-600">
+                          {calculationMethodText}
                         </td>
-                        <td className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm whitespace-nowrap`}>
+                        <td className="px-4 py-3 text-sm">
                           {formatQuotaInfo(usedQuota, remainingQuota, quotaLimit)}
                         </td>
-                        <td className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm whitespace-nowrap`}>
+                        <td className="px-4 py-3 text-sm">
                           {formatConsumptionInfo(currentAmount, referenceAmount)}
                         </td>
-                        <td className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm text-gray-600 whitespace-nowrap`}>
+                        <td className="px-4 py-3 text-sm text-gray-600">
                           <div className="text-xs">
                             {quota.refreshTimes?.[originalIndex] || '-'}
                           </div>
@@ -349,31 +340,31 @@ export default function QuotaQuery() {
                   {isExpanded && (
                     <div className="border-t border-gray-200 p-4">
                       <div className="overflow-x-auto" style={{ maxHeight: 'calc(100vh - 250px)' }}>
-                        <table className={`min-w-full divide-y divide-gray-200 ${isApp() ? 'text-xs' : ''}`}>
+                        <table className="min-w-full divide-y divide-gray-200">
                           <thead className="bg-gradient-to-r from-gray-50 to-gray-100 sticky top-0 z-20 shadow-sm">
                             <tr>
-                              <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-semibold text-gray-700 uppercase tracking-wider sticky left-0 bg-gradient-to-r from-gray-50 to-gray-100 z-30 border-r border-gray-200 whitespace-nowrap`}>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider sticky left-0 bg-gradient-to-r from-gray-50 to-gray-100 z-30 border-r border-gray-200">
                                 名稱
                               </th>
-                              <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-nowrap`}>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                                 回饋組成
                               </th>
-                              <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-nowrap`}>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                                 計算方式
                               </th>
-                              <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-semibold text-gray-700 uppercase tracking-wider ${isApp() ? 'min-w-[100px]' : 'min-w-[140px]'} whitespace-nowrap`}>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider min-w-[140px]">
                                 額度狀態
                                 <div className="text-[10px] font-normal text-gray-500 mt-1">
                                   已用/剩餘/上限
                                 </div>
                               </th>
-                              <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-semibold text-gray-700 uppercase tracking-wider ${isApp() ? 'min-w-[90px]' : 'min-w-[120px]'} whitespace-nowrap`}>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider min-w-[120px]">
                                 消費資訊
                                 <div className="text-[10px] font-normal text-gray-500 mt-1">
                                   消費/參考餘額
                                 </div>
                               </th>
-                              <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-nowrap`}>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                                 刷新時間
                               </th>
                             </tr>
@@ -422,27 +413,27 @@ export default function QuotaQuery() {
                                   <tr key={`${quotaIndex}-${originalIndex}`} className={`${bgColor} ${borderColor} border-l-4 hover:bg-blue-100 transition-colors`}>
                                     {isFirstRow && (
                                       <td
-                                        className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm font-medium sticky left-0 ${bgColor} z-10 border-r border-gray-200 whitespace-nowrap`}
+                                        className={`px-4 py-3 text-sm font-medium sticky left-0 ${bgColor} z-10 border-r border-gray-200`}
                                         rowSpan={rewardCount}
                                       >
                                         <div className="font-semibold text-gray-900">{quota.name}</div>
                                       </td>
                                     )}
-                                    <td className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm whitespace-nowrap`}>
+                                    <td className="px-4 py-3 text-sm">
                                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
                                         {rewardPercentage || '-'}%
                                       </span>
                                     </td>
-                                    <td className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm text-gray-600 whitespace-nowrap`}>
+                                    <td className="px-4 py-3 text-sm text-gray-600">
                                       {calculationMethodText}
                                     </td>
-                                    <td className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm whitespace-nowrap`}>
+                                    <td className="px-4 py-3 text-sm">
                                       {formatQuotaInfo(usedQuota, remainingQuota, quotaLimit)}
                                     </td>
-                                    <td className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm whitespace-nowrap`}>
+                                    <td className="px-4 py-3 text-sm">
                                       {formatConsumptionInfo(currentAmount, referenceAmount)}
                                     </td>
-                                    <td className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm text-gray-600 whitespace-nowrap`}>
+                                    <td className="px-4 py-3 text-sm text-gray-600">
                                       <div className="text-xs">
                                         {quota.refreshTimes?.[originalIndex] || '-'}
                                       </div>
@@ -483,31 +474,31 @@ export default function QuotaQuery() {
                   {isExpanded && (
                     <div className="border-t border-gray-200 p-4">
                       <div className="overflow-x-auto" style={{ maxHeight: 'calc(100vh - 250px)' }}>
-                        <table className={`min-w-full divide-y divide-gray-200 ${isApp() ? 'text-xs' : ''}`}>
+                        <table className="min-w-full divide-y divide-gray-200">
                           <thead className="bg-gradient-to-r from-gray-50 to-gray-100 sticky top-0 z-20 shadow-sm">
                             <tr>
-                              <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-semibold text-gray-700 uppercase tracking-wider sticky left-0 bg-gradient-to-r from-gray-50 to-gray-100 z-30 border-r border-gray-200 whitespace-nowrap`}>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider sticky left-0 bg-gradient-to-r from-gray-50 to-gray-100 z-30 border-r border-gray-200">
                                 名稱
                               </th>
-                              <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-nowrap`}>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                                 回饋組成
                               </th>
-                              <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-nowrap`}>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                                 計算方式
                               </th>
-                              <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-semibold text-gray-700 uppercase tracking-wider ${isApp() ? 'min-w-[100px]' : 'min-w-[140px]'} whitespace-nowrap`}>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider min-w-[140px]">
                                 額度狀態
                                 <div className="text-[10px] font-normal text-gray-500 mt-1">
                                   已用/剩餘/上限
                                 </div>
                               </th>
-                              <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-semibold text-gray-700 uppercase tracking-wider ${isApp() ? 'min-w-[90px]' : 'min-w-[120px]'} whitespace-nowrap`}>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider min-w-[120px]">
                                 消費資訊
                                 <div className="text-[10px] font-normal text-gray-500 mt-1">
                                   消費/參考餘額
                                 </div>
                               </th>
-                              <th className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-left text-xs font-semibold text-gray-700 uppercase tracking-wider whitespace-nowrap`}>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                                 刷新時間
                               </th>
                             </tr>
@@ -556,27 +547,27 @@ export default function QuotaQuery() {
                                   <tr key={`${quotaIndex}-${originalIndex}`} className={`${bgColor} ${borderColor} border-l-4 hover:bg-blue-100 transition-colors`}>
                                     {isFirstRow && (
                                       <td
-                                        className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm font-medium sticky left-0 ${bgColor} z-10 border-r border-gray-200 whitespace-nowrap`}
+                                        className={`px-4 py-3 text-sm font-medium sticky left-0 ${bgColor} z-10 border-r border-gray-200`}
                                         rowSpan={rewardCount}
                                       >
                                         <div className="font-semibold text-gray-900">{quota.name}</div>
                                       </td>
                                     )}
-                                    <td className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm whitespace-nowrap`}>
+                                    <td className="px-4 py-3 text-sm">
                                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
                                         {rewardPercentage || '-'}%
                                       </span>
                                     </td>
-                                    <td className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm text-gray-600 whitespace-nowrap`}>
+                                    <td className="px-4 py-3 text-sm text-gray-600">
                                       {calculationMethodText}
                                     </td>
-                                    <td className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm whitespace-nowrap`}>
+                                    <td className="px-4 py-3 text-sm">
                                       {formatQuotaInfo(usedQuota, remainingQuota, quotaLimit)}
                                     </td>
-                                    <td className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm whitespace-nowrap`}>
+                                    <td className="px-4 py-3 text-sm">
                                       {formatConsumptionInfo(currentAmount, referenceAmount)}
                                     </td>
-                                    <td className={`${isApp() ? 'px-2 py-2' : 'px-4 py-3'} text-sm text-gray-600 whitespace-nowrap`}>
+                                    <td className="px-4 py-3 text-sm text-gray-600">
                                       <div className="text-xs">
                                         {quota.refreshTimes?.[originalIndex] || '-'}
                                       </div>

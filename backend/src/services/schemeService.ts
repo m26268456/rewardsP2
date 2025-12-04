@@ -257,15 +257,14 @@ export async function queryChannelRewardsByKeywords(
 
       // 返回所有匹配的通路（支持部分匹配時返回多個結果）
       // 例如："NET" 可以匹配 "NET" 和 "NETFLIX"，分別返回兩個結果
-      // 根據需求，需要按照關鍵字分組，顯示方案中設定的通路名稱
       const channelRewardsList = [];
       for (const match of matches) {
-        const channelRewards = await queryChannelRewards([match.id], keyword);
+        const channelRewards = await queryChannelRewards([match.id]);
         if (channelRewards.length > 0) {
-          // 使用關鍵字作為顯示名稱，但結果中會包含方案中設定的通路名稱
+          const { baseName } = parseChannelName(match.name);
           channelRewardsList.push({
             channelId: match.id,
-            channelName: keyword, // 使用搜尋關鍵字作為顯示名稱
+            channelName: baseName,
             results: channelRewards[0].results,
           });
         }
@@ -294,8 +293,7 @@ export async function queryChannelRewardsByKeywords(
  * 查詢通路回饋（核心查詢邏輯）
  */
 export async function queryChannelRewards(
-  channelIds: string[],
-  searchKeyword?: string // 可選的搜尋關鍵字，用於顯示方案中設定的通路名稱
+  channelIds: string[]
 ): Promise<
   Array<{
     channelId: string;
@@ -308,7 +306,6 @@ export async function queryChannelRewards(
       schemeInfo: string;
       requiresSwitch: boolean;
       note?: string;
-      channelNameInScheme?: string; // 方案中設定的通路名稱
     }>;
   }>
 > {
@@ -340,10 +337,9 @@ export async function queryChannelRewards(
         cardName: r.card_name,
       }));
 
-      // 2. 找出適用此通路的卡片方案（包含方案中設定的通路名稱）
+      // 2. 找出適用此通路的卡片方案
       const schemeApplicationsResult = await pool.query(
         `SELECT cs.id, cs.name, cs.requires_switch, cs.activity_end_date, c.name as card_name, sca.note,
-                ch.name as channel_name_in_scheme,
                 (SELECT json_agg(
                   json_build_object(
                     'percentage', reward_percentage,
@@ -355,7 +351,6 @@ export async function queryChannelRewards(
          FROM scheme_channel_applications sca
          JOIN card_schemes cs ON sca.scheme_id = cs.id
          JOIN cards c ON cs.card_id = c.id
-         JOIN channels ch ON sca.channel_id = ch.id
          WHERE sca.channel_id = $1
          AND cs.id NOT IN (SELECT scheme_id FROM scheme_channel_exclusions WHERE channel_id = $1)`,
         [channelId]
@@ -419,9 +414,6 @@ export async function queryChannelRewards(
           .map((r: any) => `${r.percentage}%`)
           .join('+');
 
-        // 解析方案中設定的通路名稱（去除別稱部分）
-        const { baseName } = parseChannelName(row.channel_name_in_scheme || channelName);
-        
         return {
           isExcluded: false,
           totalRewardPercentage: totalPercentage,
@@ -430,7 +422,6 @@ export async function queryChannelRewards(
           requiresSwitch: row.requires_switch,
           note: row.note || undefined,
           activityEndDate: row.activity_end_date || undefined,
-          channelNameInScheme: baseName, // 方案中設定的通路名稱（去除別稱）
         };
       });
 
@@ -456,19 +447,28 @@ export async function queryChannelRewards(
 
       const paymentSchemeResults = paymentSchemeLinksResult.rows.map((row) => {
         const schemeRewards = row.scheme_rewards || [];
+        const paymentRewards = row.payment_rewards || [];
         
-        // 只使用方案本身的回饋，不疊加支付方式的回饋
         const schemeTotal = schemeRewards.reduce(
           (sum: number, r: any) => sum + parseFloat(r.percentage),
           0
         );
+        const paymentTotal = paymentRewards.reduce(
+          (sum: number, r: any) => sum + parseFloat(r.percentage),
+          0
+        );
+        
+        const totalPercentage = schemeTotal + paymentTotal;
         
         const schemeBreakdown = schemeRewards.map((r: any) => `${r.percentage}%`).join('+');
-        const breakdown = schemeBreakdown || '0%';
+        const paymentBreakdown = paymentRewards.map((r: any) => `${r.percentage}%`).join('+');
+        const breakdown = [schemeBreakdown, paymentBreakdown]
+          .filter(b => b.length > 0)
+          .join('+') || '0%';
 
         return {
           isExcluded: false,
-          totalRewardPercentage: schemeTotal,
+          totalRewardPercentage: totalPercentage,
           rewardBreakdown: breakdown,
           schemeInfo: `${row.card_name}-${row.name}-${row.payment_name}`,
           requiresSwitch: row.requires_switch,

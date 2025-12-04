@@ -484,9 +484,7 @@ export default function QueryRewards() {
                                             ⚠️ 方案已逾期
                                           </span>
                                         )}
-                                        <span className="text-gray-700">
-                                          {(item as any).channelNameInScheme || result.channelName}
-                                        </span>
+                                        <span className="text-gray-700">{result.channelName}</span>
                                       </div>
                                       {isExpired && item.activityEndDate && (
                                         <div className="mt-1 text-xs text-yellow-700">

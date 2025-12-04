@@ -43,10 +43,8 @@ CREATE TABLE scheme_rewards (
     quota_limit DECIMAL(12,2), -- 額度上限，NULL 表示無上限
     quota_refresh_type VARCHAR(20) CHECK (quota_refresh_type IN ('monthly', 'date', 'activity')), 
     -- monthly: 每月固定日期, date: 指定日期, activity: 活動結束日
-    quota_refresh_value INTEGER CHECK (quota_refresh_value >= 1 AND quota_refresh_value <= 28), -- 每月幾號（1~28號）
+    quota_refresh_value INTEGER, -- 每月幾號或日期（根據 refresh_type 解釋）
     quota_refresh_date DATE, -- 指定日期刷新（當 refresh_type = 'date' 時使用）
-    quota_calculation_mode VARCHAR(20) DEFAULT 'per_transaction' CHECK (quota_calculation_mode IN ('per_transaction', 'total_amount')), 
-    -- per_transaction: 單筆回饋（每筆消費過後的計算方式），total_amount: 帳單總額（總消費金額的計算方式）
     display_order INTEGER NOT NULL DEFAULT 0, -- 顯示順序
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -87,10 +85,8 @@ CREATE TABLE payment_rewards (
     quota_limit DECIMAL(12,2), -- 額度上限，NULL 表示無上限
     quota_refresh_type VARCHAR(20) CHECK (quota_refresh_type IN ('monthly', 'date', 'activity')), 
     -- monthly: 每月固定日期, date: 指定日期, activity: 活動結束日
-    quota_refresh_value INTEGER CHECK (quota_refresh_value >= 1 AND quota_refresh_value <= 28), -- 每月幾號（1~28號）
+    quota_refresh_value INTEGER, -- 每月幾號或日期（根據 refresh_type 解釋）
     quota_refresh_date DATE, -- 指定日期刷新（當 refresh_type = 'date' 時使用）
-    quota_calculation_mode VARCHAR(20) DEFAULT 'per_transaction' CHECK (quota_calculation_mode IN ('per_transaction', 'total_amount')), 
-    -- per_transaction: 單筆回饋（每筆消費過後的計算方式），total_amount: 帳單總額（總消費金額的計算方式）
     display_order INTEGER NOT NULL DEFAULT 0, -- 顯示順序
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP

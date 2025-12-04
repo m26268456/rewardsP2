@@ -25,7 +25,6 @@ router.get('/', async (req: Request, res: Response) => {
          sr.quota_refresh_type,
          sr.quota_refresh_value,
          sr.quota_refresh_date,
-         sr.quota_calculation_mode,
          cs.activity_end_date,
          sr.display_order,
          qt.used_quota,
@@ -61,7 +60,6 @@ router.get('/', async (req: Request, res: Response) => {
          pr.quota_refresh_type,
          pr.quota_refresh_value,
          pr.quota_refresh_date,
-         pr.quota_calculation_mode,
          NULL::date as activity_end_date,
          pr.display_order,
          COALESCE(qt.used_quota, 0) as used_quota,
@@ -167,7 +165,6 @@ router.get('/', async (req: Request, res: Response) => {
          sr.quota_refresh_type,
          sr.quota_refresh_value,
          sr.quota_refresh_date,
-         sr.quota_calculation_mode,
          cs.activity_end_date,
          qt.used_quota,
          qt.remaining_quota,
@@ -201,7 +198,6 @@ router.get('/', async (req: Request, res: Response) => {
          pr.quota_refresh_type,
          pr.quota_refresh_value,
          pr.quota_refresh_date,
-         pr.quota_calculation_mode,
          NULL::date as activity_end_date,
          COALESCE(qt.used_quota, 0) as used_quota,
          qt.remaining_quota,
@@ -237,7 +233,6 @@ router.get('/', async (req: Request, res: Response) => {
         quotaRefreshType: string | null;
         quotaRefreshValue: number | null;
         quotaRefreshDate: string | null;
-        quotaCalculationMode: 'per_transaction' | 'total_amount';
       }>;
     }>();
 
@@ -308,7 +303,6 @@ router.get('/', async (req: Request, res: Response) => {
         quotaRefreshType: row.quota_refresh_type || null,
         quotaRefreshValue: row.quota_refresh_value || null,
         quotaRefreshDate: row.quota_refresh_date ? row.quota_refresh_date.toISOString().split('T')[0] : null,
-        quotaCalculationMode: (row.quota_calculation_mode || 'per_transaction') as 'per_transaction' | 'total_amount',
       });
     });
 
@@ -333,7 +327,6 @@ router.get('/', async (req: Request, res: Response) => {
         quotaRefreshType: string | null;
         quotaRefreshValue: number | null;
         quotaRefreshDate: string | null;
-        quotaCalculationMode: 'per_transaction' | 'total_amount';
       }>;
     }>();
 
@@ -390,7 +383,6 @@ router.get('/', async (req: Request, res: Response) => {
         quotaRefreshType: row.quota_refresh_type || null,
         quotaRefreshValue: row.quota_refresh_value || null,
         quotaRefreshDate: row.quota_refresh_date ? row.quota_refresh_date.toISOString().split('T')[0] : null,
-        quotaCalculationMode: (row.quota_calculation_mode || 'per_transaction') as 'per_transaction' | 'total_amount',
       });
     });
 
@@ -417,7 +409,6 @@ router.get('/', async (req: Request, res: Response) => {
       quotaRefreshTypes: Array<string | null>;
       quotaRefreshValues: Array<number | null>;
       quotaRefreshDates: Array<string | null>;
-      quotaCalculationModes: Array<'per_transaction' | 'total_amount'>;
     }> = [];
     
     // 處理卡片方案的額度（只處理有 schemeId 且沒有 paymentMethodId 的）
@@ -448,7 +439,6 @@ router.get('/', async (req: Request, res: Response) => {
           quotaRefreshTypes: quota.rewards.map(r => r.quotaRefreshType),
           quotaRefreshValues: quota.rewards.map(r => r.quotaRefreshValue),
           quotaRefreshDates: quota.rewards.map(r => r.quotaRefreshDate),
-          quotaCalculationModes: quota.rewards.map(r => (r.quotaCalculationMode || 'per_transaction') as 'per_transaction' | 'total_amount'),
         });
       }
     });
@@ -480,7 +470,6 @@ router.get('/', async (req: Request, res: Response) => {
           quotaRefreshTypes: quota.rewards.map(r => r.quotaRefreshType),
           quotaRefreshValues: quota.rewards.map(r => r.quotaRefreshValue),
           quotaRefreshDates: quota.rewards.map(r => r.quotaRefreshDate),
-          quotaCalculationModes: quota.rewards.map(r => (r.quotaCalculationMode || 'per_transaction') as 'per_transaction' | 'total_amount'),
         });
       }
     });
@@ -518,7 +507,6 @@ router.get('/', async (req: Request, res: Response) => {
           quotaRefreshTypes: [],
           quotaRefreshValues: [],
           quotaRefreshDates: [],
-          quotaCalculationModes: [],
         });
         existingSchemeIds.add(row.id);
       }
