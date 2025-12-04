@@ -237,6 +237,7 @@ router.get('/', async (req: Request, res: Response) => {
         quotaRefreshType: string | null;
         quotaRefreshValue: number | null;
         quotaRefreshDate: string | null;
+        quotaCalculationMode: 'per_transaction' | 'total_amount';
       }>;
     }>();
 
@@ -332,6 +333,7 @@ router.get('/', async (req: Request, res: Response) => {
         quotaRefreshType: string | null;
         quotaRefreshValue: number | null;
         quotaRefreshDate: string | null;
+        quotaCalculationMode: 'per_transaction' | 'total_amount';
       }>;
     }>();
 
@@ -516,6 +518,7 @@ router.get('/', async (req: Request, res: Response) => {
           quotaRefreshTypes: [],
           quotaRefreshValues: [],
           quotaRefreshDates: [],
+          quotaCalculationModes: [],
         });
         existingSchemeIds.add(row.id);
       }
