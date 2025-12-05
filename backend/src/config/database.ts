@@ -14,7 +14,7 @@ const pool = new Pool({
 });
 
 // 監聽連線錯誤 (避免連線閒置斷開時導致 App 崩潰)
-pool.on('error', (err, client) => {
+pool.on('error', (err, _client) => {
   logger.error('❌ Unexpected error on idle client', err);
 });
 

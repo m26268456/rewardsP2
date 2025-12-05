@@ -1,6 +1,6 @@
 import { pool } from '../config/database';
-import { SchemeInfo, RewardComposition } from '../utils/types';
-import { parseChannelName, matchesChannelName } from '../utils/channelUtils';
+import { RewardComposition } from '../utils/types';
+import { matchesChannelName } from '../utils/channelUtils';
 import { logger } from '../utils/logger';
 
 /**
@@ -182,7 +182,7 @@ export async function getAllCardsWithSchemes(): Promise<
         requiresSwitch: scheme.requiresSwitch,
         activityStartDate: scheme.activityStartDate,
         activityEndDate: scheme.activityEndDate,
-        rewards: scheme.rewards.sort((a, b) => {
+        rewards: scheme.rewards.sort((_a, _b) => {
           // 按原始順序排序（如果有 display_order）
           return 0;
         }),

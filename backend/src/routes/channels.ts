@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { pool } from '../config/database';
-import { parseChannelName, matchesChannelName } from '../utils/channelUtils';
+import { matchesChannelName } from '../utils/channelUtils';
 import { logger } from '../utils/logger';
 import { validate } from '../middleware/validate';
 import { createChannelSchema } from '../utils/validators';
@@ -57,7 +57,7 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     query += ' ORDER BY display_order, created_at';
 
     const result = await pool.query(query, params);
-    res.json({ success: true, data: result.rows });
+    return res.json({ success: true, data: result.rows });
   } catch (error) {
     logger.error('❌ 取得通路錯誤:', error);
     next(error);
@@ -86,7 +86,7 @@ router.get('/search', async (req: Request, res: Response, next: NextFunction) =>
       display_order,
     }));
 
-    res.json({ success: true, data: result });
+    return res.json({ success: true, data: result });
   } catch (error) {
     logger.error('搜尋通路錯誤:', error);
     next(error);
@@ -169,7 +169,7 @@ router.post('/batch-resolve', async (req: Request, res: Response, next: NextFunc
     }
 
     await client.query('COMMIT');
-    res.json({ success: true, data: responses });
+    return res.json({ success: true, data: responses });
   } catch (error) {
     await client.query('ROLLBACK');
     logger.error('批次解析通路錯誤:', error);
@@ -195,7 +195,7 @@ router.post('/', validate(createChannelSchema), async (req: Request, res: Respon
       [name, isCommon || false, displayOrder || 0]
     );
 
-    res.json({ success: true, data: result.rows[0] });
+    return res.json({ success: true, data: result.rows[0] });
   } catch (error) {
     logger.error('新增通路失敗:', error);
     next(error);
@@ -220,7 +220,7 @@ router.put('/:id', validate(createChannelSchema.partial()), async (req: Request,
       return res.status(404).json({ success: false, error: '通路不存在' });
     }
 
-    res.json({ success: true, data: result.rows[0] });
+    return res.json({ success: true, data: result.rows[0] });
   } catch (error) {
     logger.error(`更新通路失敗 ID ${req.params.id}:`, error);
     next(error);
@@ -241,7 +241,7 @@ router.delete('/:id', async (req: Request, res: Response, next: NextFunction) =>
       return res.status(404).json({ success: false, error: '通路不存在' });
     }
 
-    res.json({ success: true, message: '通路已刪除' });
+    return res.json({ success: true, message: '通路已刪除' });
   } catch (error) {
     logger.error(`刪除通路失敗 ID ${req.params.id}:`, error);
     next(error);

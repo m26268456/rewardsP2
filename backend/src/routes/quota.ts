@@ -2,12 +2,12 @@ import { Router, Request, Response, NextFunction } from 'express';
 import pool from '../config/database';
 import { shouldRefreshQuota, calculateNextRefreshTime, formatRefreshTime } from '../utils/quotaRefresh';
 import { logger } from '../utils/logger';
-import { QuotaDbRow } from '../utils/types';
+import { QuotaDbRow, QuotaRefreshType } from '../utils/types';
 
 const router = Router();
 
 // 取得所有額度資訊
-router.get('/', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
   let client;
   try {
     // 1. 檢查並刷新額度 (Transaction)
@@ -212,8 +212,8 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
         remainingQuota !== null && percentage > 0 ? (remainingQuota / percentage) * 100 : null;
 
       const refreshTime = formatRefreshTime(
-        row.quota_refresh_type,
-        row.quota_refresh_value,
+        (row.quota_refresh_type as QuotaRefreshType | null) || null,
+        row.quota_refresh_value || null,
         row.quota_refresh_date ? new Date(row.quota_refresh_date).toISOString().split('T')[0] : null,
         row.activity_end_date ? new Date(row.activity_end_date).toISOString().split('T')[0] : null
       );

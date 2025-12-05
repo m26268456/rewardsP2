@@ -1,22 +1,17 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { pool } from '../config/database';
-import { calculateTotalReward, calculateMarginalReward, calculateReward } from '../utils/rewardCalculation';
+import { calculateMarginalReward, calculateReward } from '../utils/rewardCalculation';
 import { calculateNextRefreshTime } from '../utils/quotaRefresh';
-import { utcToZonedTime, format as formatTz } from 'date-fns-tz';
-import * as XLSX from 'xlsx';
 import { CalculationMethod, QuotaCalculationBasis } from '../utils/types';
 import { logger } from '../utils/logger';
 import { validate } from '../middleware/validate';
 import { createTransactionSchema } from '../utils/validators';
 
-// 時區設定：UTC+8 (Asia/Taipei)
-const TIMEZONE = 'Asia/Taipei';
-
 const router = Router();
 
 // ... (GET / 保持不變，省略以節省篇幅) ...
 // 取得所有交易記錄
-router.get('/', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const result = await pool.query(
       `SELECT t.id, t.transaction_date, t.reason, t.amount, t.note, t.created_at,
@@ -181,12 +176,10 @@ router.post('/', validate(createTransactionSchema), async (req: Request, res: Re
           let currentAccumulated = 0;
           let quotaId: string | null = null;
           let currentUsedQuota = 0;
-          let currentRemainingQuota: number | null = null;
 
           if (quotaResult.rows.length > 0) {
             currentAccumulated = parseFloat(quotaResult.rows[0].current_amount) || 0;
             currentUsedQuota = parseFloat(quotaResult.rows[0].used_quota) || 0;
-            currentRemainingQuota = quotaResult.rows[0].remaining_quota ? parseFloat(quotaResult.rows[0].remaining_quota) : null;
             quotaId = quotaResult.rows[0].id;
           }
 

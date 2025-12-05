@@ -7,12 +7,12 @@ import { createCardSchema } from '../utils/validators';
 const router = Router();
 
 // 取得所有卡片（用於管理設定）
-router.get('/', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const result = await pool.query(
       'SELECT id, name, note, display_order FROM cards ORDER BY display_order, created_at'
     );
-    res.json({ success: true, data: result.rows });
+    return res.json({ success: true, data: result.rows });
   } catch (error) {
     logger.error('取得卡片列表失敗:', error);
     next(error);
@@ -35,7 +35,7 @@ router.post('/', validate(createCardSchema), async (req: Request, res: Response,
       [name, note || null, displayOrder || 0]
     );
 
-    res.json({ success: true, data: result.rows[0] });
+    return res.json({ success: true, data: result.rows[0] });
   } catch (error) {
     logger.error('新增卡片失敗:', error);
     next(error);
@@ -60,7 +60,7 @@ router.put('/:id', validate(createCardSchema.partial()), async (req: Request, re
       return res.status(404).json({ success: false, error: '卡片不存在' });
     }
 
-    res.json({ success: true, data: result.rows[0] });
+    return res.json({ success: true, data: result.rows[0] });
   } catch (error) {
     logger.error(`更新卡片失敗 ID ${req.params.id}:`, error);
     next(error);
@@ -78,7 +78,7 @@ router.delete('/:id', async (req: Request, res: Response, next: NextFunction) =>
       return res.status(404).json({ success: false, error: '卡片不存在' });
     }
 
-    res.json({ success: true, message: '卡片已刪除' });
+    return res.json({ success: true, message: '卡片已刪除' });
   } catch (error) {
     logger.error(`刪除卡片失敗 ID ${req.params.id}:`, error);
     next(error);
