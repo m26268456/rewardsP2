@@ -369,7 +369,7 @@ router.post('/import', async (req: Request, res: Response, next: NextFunction) =
       }
     }
     logger.error('❌ 導入資料錯誤:', error);
-    next(error);
+    return next(error);
   } finally {
     if (client) {
       client.release();

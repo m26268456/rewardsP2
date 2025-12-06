@@ -276,7 +276,7 @@ router.post('/', validate(createTransactionSchema), async (req: Request, res: Re
       }
 
       await client.query('COMMIT');
-      res.json({ success: true, data: transaction });
+      return res.json({ success: true, data: transaction });
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
@@ -285,7 +285,7 @@ router.post('/', validate(createTransactionSchema), async (req: Request, res: Re
     }
   } catch (error) {
     logger.error('新增交易失敗:', error);
-    next(error);
+    return next(error);
   }
 });
 
@@ -419,11 +419,11 @@ router.delete('/:id', async (req: Request, res: Response, next: NextFunction) =>
     await client.query('DELETE FROM transactions WHERE id = $1', [id]);
 
     await client.query('COMMIT');
-    res.json({ success: true, message: '交易已刪除並回補額度' });
+    return res.json({ success: true, message: '交易已刪除並回補額度' });
   } catch (error) {
     await client.query('ROLLBACK');
     logger.error(`刪除交易失敗 ID ${id}:`, error);
-    next(error);
+    return next(error);
   } finally {
     client.release();
   }

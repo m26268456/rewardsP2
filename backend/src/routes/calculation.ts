@@ -29,7 +29,7 @@ router.post('/calculate', async (req: Request, res: Response, next: NextFunction
     return res.json({ success: true, data: calculation });
   } catch (error) {
     logger.error('回饋計算失敗 (不帶方案):', error);
-    next(error);
+    return next(error);
   }
 });
 
@@ -156,7 +156,7 @@ router.post('/calculate-with-scheme', async (req: Request, res: Response, next: 
     });
   } catch (error) {
     logger.error('回饋計算失敗 (帶方案):', error);
-    next(error);
+    return next(error);
   }
 });
 
@@ -200,7 +200,7 @@ router.get('/schemes', async (_req: Request, res: Response, next: NextFunction) 
     return res.json({ success: true, data: schemes });
   } catch (error) {
     logger.error('取得計算方案列表失敗:', error);
-    next(error);
+    return next(error);
   }
 });
 

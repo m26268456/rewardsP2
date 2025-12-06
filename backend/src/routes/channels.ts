@@ -60,7 +60,7 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     return res.json({ success: true, data: result.rows });
   } catch (error) {
     logger.error('❌ 取得通路錯誤:', error);
-    next(error);
+    return next(error);
   }
 });
 
@@ -89,7 +89,7 @@ router.get('/search', async (req: Request, res: Response, next: NextFunction) =>
     return res.json({ success: true, data: result });
   } catch (error) {
     logger.error('搜尋通路錯誤:', error);
-    next(error);
+    return next(error);
   }
 });
 
@@ -173,7 +173,7 @@ router.post('/batch-resolve', async (req: Request, res: Response, next: NextFunc
   } catch (error) {
     await client.query('ROLLBACK');
     logger.error('批次解析通路錯誤:', error);
-    next(error);
+    return next(error);
   } finally {
     client.release();
   }
@@ -198,7 +198,7 @@ router.post('/', validate(createChannelSchema), async (req: Request, res: Respon
     return res.json({ success: true, data: result.rows[0] });
   } catch (error) {
     logger.error('新增通路失敗:', error);
-    next(error);
+    return next(error);
   }
 });
 
@@ -223,7 +223,7 @@ router.put('/:id', validate(createChannelSchema.partial()), async (req: Request,
     return res.json({ success: true, data: result.rows[0] });
   } catch (error) {
     logger.error(`更新通路失敗 ID ${req.params.id}:`, error);
-    next(error);
+    return next(error);
   }
 });
 
@@ -244,7 +244,7 @@ router.delete('/:id', async (req: Request, res: Response, next: NextFunction) =>
     return res.json({ success: true, message: '通路已刪除' });
   } catch (error) {
     logger.error(`刪除通路失敗 ID ${req.params.id}:`, error);
-    next(error);
+    return next(error);
   }
 });
 

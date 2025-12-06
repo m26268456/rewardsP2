@@ -5,7 +5,7 @@ import { logger } from '../utils/logger';
 const router = Router();
 
 // 初始化資料庫結構（支援 GET 和 POST）
-router.get('/schema', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/schema', async (_req: Request, res: Response, next: NextFunction) => {
   let client;
   try {
     console.log('📥 收到資料庫結構初始化請求');
@@ -214,13 +214,13 @@ router.get('/schema', async (req: Request, res: Response, next: NextFunction) =>
 
     console.log('✅ 資料庫結構初始化完成');
 
-    res.json({
+    return res.json({
       success: true,
       message: '資料庫結構初始化成功！',
     });
   } catch (error: any) {
     logger.error('❌ 資料庫結構初始化錯誤:', error);
-    next(error);
+    return next(error);
   } finally {
     if (client) {
       client.release();
@@ -229,7 +229,7 @@ router.get('/schema', async (req: Request, res: Response, next: NextFunction) =>
 });
 
 // 匯入測試資料（支援 GET 和 POST）
-router.post('/import', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/import', async (_req: Request, res: Response, next: NextFunction) => {
   let client;
   try {
     console.log('📥 收到測試資料匯入請求');
@@ -472,7 +472,7 @@ router.post('/import', async (req: Request, res: Response, next: NextFunction) =
     await client.query('COMMIT');
     console.log('✅ 事務提交成功');
 
-    res.json({
+    return res.json({
       success: true,
       message: '測試資料匯入成功！',
     });
@@ -487,7 +487,7 @@ router.post('/import', async (req: Request, res: Response, next: NextFunction) =
       }
     }
     logger.error('❌ 匯入測試資料錯誤:', error);
-    next(error);
+    return next(error);
   } finally {
     if (client) {
       client.release();

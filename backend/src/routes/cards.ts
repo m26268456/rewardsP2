@@ -15,7 +15,7 @@ router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
     return res.json({ success: true, data: result.rows });
   } catch (error) {
     logger.error('取得卡片列表失敗:', error);
-    next(error);
+    return next(error);
   }
 });
 
@@ -38,7 +38,7 @@ router.post('/', validate(createCardSchema), async (req: Request, res: Response,
     return res.json({ success: true, data: result.rows[0] });
   } catch (error) {
     logger.error('新增卡片失敗:', error);
-    next(error);
+    return next(error);
   }
 });
 
@@ -63,7 +63,7 @@ router.put('/:id', validate(createCardSchema.partial()), async (req: Request, re
     return res.json({ success: true, data: result.rows[0] });
   } catch (error) {
     logger.error(`更新卡片失敗 ID ${req.params.id}:`, error);
-    next(error);
+    return next(error);
   }
 });
 
@@ -81,7 +81,7 @@ router.delete('/:id', async (req: Request, res: Response, next: NextFunction) =>
     return res.json({ success: true, message: '卡片已刪除' });
   } catch (error) {
     logger.error(`刪除卡片失敗 ID ${req.params.id}:`, error);
-    next(error);
+    return next(error);
   }
 });
 

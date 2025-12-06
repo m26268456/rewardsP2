@@ -1,6 +1,6 @@
 import { pool } from '../config/database';
 import { RewardComposition } from '../utils/types';
-import { matchesChannelName } from '../utils/channelUtils';
+import { parseChannelName, matchesChannelName } from '../utils/channelUtils';
 import { logger } from '../utils/logger';
 
 /**
